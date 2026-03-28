@@ -1,0 +1,1003 @@
+﻿<Window x:Class="L2Companion.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="L2 Companion Control Center"
+        Height="900"
+        Width="1400"
+        MinHeight="760"
+        MinWidth="1180"
+        FontFamily="Bahnschrift">
+    <Window.Background>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#0D1117" Offset="0.0" />
+            <GradientStop Color="#0D1117" Offset="0.55" />
+            <GradientStop Color="#0F1724" Offset="1.0" />
+        </LinearGradientBrush>
+    </Window.Background>
+    <Window.Resources>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#161B22" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#161B22" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#E6EDF3" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#E6EDF3" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlLightBrushKey}" Color="#21262D" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlLightLightBrushKey}" Color="#2D333B" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlDarkBrushKey}" Color="#161B22" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlDarkDarkBrushKey}" Color="#0D1117" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#388BFD" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#388BFD" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.GrayTextBrushKey}" Color="#8B949E" />
+
+                <Style TargetType="TabControl">
+            <Setter Property="Background" Value="#161B22" />
+            <Setter Property="Foreground" Value="#E6EDF3" />
+            <Setter Property="BorderBrush" Value="#30363D" />
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid KeyboardNavigation.TabNavigation="Local">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <TabPanel Grid.Row="0" Margin="0,0,0,2" IsItemsHost="True" Background="Transparent" KeyboardNavigation.TabIndex="1" />
+                            <Border Grid.Row="1" Background="#1C2333" BorderBrush="#30363D" BorderThickness="1" CornerRadius="0,6,6,6" Padding="2">
+                                <ContentPresenter x:Name="PART_SelectedContentHost" Margin="2" ContentSource="SelectedContent" />
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="TabItem">
+            <Setter Property="Background" Value="#21262D" />
+            <Setter Property="Foreground" Value="#C9D1D9" />
+            <Setter Property="BorderBrush" Value="#30363D" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd"
+                                Margin="0,0,2,0"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6,6,0,0">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              ContentSource="Header"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#30363D" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#388BFD" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#388BFD" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#388BFD" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                                <Setter Property="Panel.ZIndex" Value="100" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#8B949E" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="GroupBox">
+            <Setter Property="Foreground" Value="#E6EDF3" />
+            <Setter Property="BorderBrush" Value="#30363D" />
+            <Setter Property="Background" Value="#1C2333" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="Margin" Value="0,6,0,6" />
+        </Style>
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E6EDF3" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="0,3,0,3" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="Background" Value="#0D1117" />
+            <Setter Property="Foreground" Value="#E6EDF3" />
+            <Setter Property="BorderBrush" Value="#30363D" />
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Background" Value="#21262D" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#30363D" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#388BFD" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#388BFD" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1F6FEB" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#1F6FEB" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Background" Value="#161B22" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#2D333B" />
+                                <Setter Property="Foreground" Value="#6E7681" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#C9D1D9" />
+            <Setter Property="Margin" Value="0,0,18,6" />
+        </Style>
+        <Style x:Key="DarkComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="#0D1117" />
+            <Setter Property="Foreground" Value="#E6EDF3" />
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="#388BFD" />
+                    <Setter Property="Foreground" Value="#E6EDF3" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#30363D" />
+                    <Setter Property="Foreground" Value="#FFFFFF" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Margin" Value="0,3,0,3" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="Background" Value="#0D1117" />
+            <Setter Property="Foreground" Value="#E6EDF3" />
+            <Setter Property="BorderBrush" Value="#30363D" />
+            <Setter Property="TextElement.Foreground" Value="#E6EDF3" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItemStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton"
+                                          Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                          Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="ToggleBorder"
+                                                Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6,3">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="18" />
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Grid.Column="0"
+                                                                  Margin="2,0,4,0"
+                                                                  VerticalAlignment="Center"
+                                                                  HorizontalAlignment="Left"
+                                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  ContentStringFormat="{Binding SelectionBoxItemStringFormat, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBox}}" />
+                                                <Path Grid.Column="1"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Center"
+                                                      Fill="#8B949E"
+                                                      Data="M 0 0 L 4 4 L 8 0 Z" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="#388BFD" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Popup x:Name="Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Slide">
+                                <Border x:Name="DropDownBorder"
+                                        Background="#161B22"
+                                        BorderBrush="#30363D"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        SnapsToDevicePixels="True">
+                                    <ScrollViewer Margin="2" SnapsToDevicePixels="True">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter TargetName="DropDownBorder" Property="MinHeight" Value="20" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#8B949E" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#C9D1D9" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="4,2" />
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#388BFD" />
+                    <Setter Property="Foreground" Value="#FFFFFF" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#21262D" />
+            <Setter Property="Foreground" Value="#E6EDF3" />
+            <Setter Property="BorderBrush" Value="#30363D" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#E6EDF3" />
+            <Setter Property="BorderBrush" Value="#30363D" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="6,3" />
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#388BFD" />
+                    <Setter Property="Foreground" Value="#FFFFFF" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="DataGridRow">
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#388BFD" />
+                    <Setter Property="Foreground" Value="#FFFFFF" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="#161B22" />
+            <Setter Property="Foreground" Value="#E6EDF3" />
+            <Setter Property="BorderBrush" Value="#30363D" />
+            <Setter Property="GridLinesVisibility" Value="Horizontal" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="RowBackground" Value="#161B22" />
+            <Setter Property="AlternatingRowBackground" Value="#21262D" />
+            <Setter Property="CanUserAddRows" Value="False" />
+            <Setter Property="CanUserDeleteRows" Value="False" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="EnableRowVirtualization" Value="True" />
+            <Setter Property="EnableColumnVirtualization" Value="True" />
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Background="#21262D" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Live Session" Foreground="#79C0FF" FontSize="12" />
+                    <TextBlock Text="{Binding Status}" FontSize="20" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding ParserSummary}" FontFamily="Consolas" Foreground="#C9D1D9" Margin="0,2,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Start Proxy" Command="{Binding StartProxyCommand}" Background="#22C55E" BorderBrush="#22C55E" />
+                    <Button Content="Stop Proxy" Command="{Binding StopProxyCommand}" Background="#EF4444" BorderBrush="#EF4444" />
+                    <Button Content="Start Bot" Command="{Binding StartBotCommand}" Background="#1F6FEB" BorderBrush="#1F6FEB" />
+                    <Button Content="Stop Bot" Command="{Binding StopBotCommand}" Background="#EF4444" BorderBrush="#EF4444" />
+                    <Button Content="Overlay" Command="{Binding ToggleOverlayCommand}" Background="#06B6D4" BorderBrush="#06B6D4" Margin="0,0,0,8" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TabControl Grid.Row="1" Margin="0,10,0,0" Background="#161B22" BorderBrush="#5A5E64" Foreground="#E6EDF3" SelectedIndex="{Binding SelectedTabIndex}">
+            <TabItem Header="Overview">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="2*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Background="#23344F" BorderBrush="#388BFD" BorderThickness="1" CornerRadius="8" Padding="10">
+                            <StackPanel>
+                                <TextBlock Text="Character" Foreground="#79C0FF" FontSize="12" />
+                                <TextBlock Text="{Binding CharacterSummary}" FontSize="18" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding ResourceSummary}" Margin="0,6,0,0" FontFamily="Consolas" />
+                                <TextBlock Text="{Binding PositionSummary}" FontFamily="Consolas" Foreground="#C9D1D9" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Background="#23344F" BorderBrush="#388BFD" BorderThickness="1" CornerRadius="8" Padding="10">
+                            <StackPanel>
+                                <TextBlock Text="Proxy &amp; Session" Foreground="#79C0FF" FontSize="12" />
+                                <TextBlock Text="{Binding ProxyStateSummary}" FontFamily="Consolas" />
+                                <TextBlock Text="{Binding ProxyTrafficSummary}" Margin="0,2,0,0" FontFamily="Consolas" />
+                                <TextBlock Text="{Binding SessionSummary}" Margin="0,2,0,0" FontFamily="Consolas" Foreground="#C9D1D9" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="1" Background="#23344F" BorderBrush="#388BFD" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="World &amp; Parser" Foreground="#79C0FF" FontSize="12" />
+                            <TextBlock Text="{Binding WorldSummary}" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding ParserSummary}" FontFamily="Consolas" Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Grid.Row="2" Margin="0,10,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="10" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Background="#1C2333" BorderBrush="#3E5A86" BorderThickness="1" CornerRadius="8" Padding="8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Party Members" FontSize="15" FontWeight="SemiBold" />
+                                <DataGrid Grid.Row="1" Margin="0,6,0,0" ItemsSource="{Binding PartyRows}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                                        <DataGridTextColumn Header="Lvl" Binding="{Binding Level}" Width="60" />
+                                        <DataGridTextColumn Header="HP" Binding="{Binding Hp}" Width="120" />
+                                        <DataGridTextColumn Header="MP" Binding="{Binding Mp}" Width="120" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Column="2" Background="#1C2333" BorderBrush="#3E5A86" BorderThickness="1" CornerRadius="8" Padding="8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Known Skills" FontSize="15" FontWeight="SemiBold" />
+                                <DataGrid Grid.Row="1" Margin="0,6,0,0" ItemsSource="{Binding SkillRows}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Skill ID" Binding="{Binding SkillId}" Width="90" />
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                                        <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="90" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="2" Background="#1C2333" BorderBrush="#3E5A86" BorderThickness="1" CornerRadius="8" Padding="8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Nearby NPCs" FontSize="15" FontWeight="SemiBold" />
+                                <DataGrid Grid.Row="1" Margin="0,6,0,0" ItemsSource="{Binding NpcRows}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="OID" Binding="{Binding ObjectId}" Width="90" />
+                                        <DataGridTextColumn Header="NpcId" Binding="{Binding NpcId}" Width="90" />
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                                        <DataGridTextColumn Header="HP" Binding="{Binding Hp}" Width="90" />
+                                        <DataGridTextColumn Header="Dist" Binding="{Binding Dist}" Width="90" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="2" Grid.Column="2" Background="#1C2333" BorderBrush="#3E5A86" BorderThickness="1" CornerRadius="8" Padding="8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Ground Items" FontSize="15" FontWeight="SemiBold" />
+                                <DataGrid Grid.Row="1" Margin="0,6,0,0" ItemsSource="{Binding ItemRows}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="OID" Binding="{Binding ObjectId}" Width="90" />
+                                        <DataGridTextColumn Header="ItemId" Binding="{Binding ItemId}" Width="90" />
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                                        <DataGridTextColumn Header="Count" Binding="{Binding Count}" Width="80" />
+                                        <DataGridTextColumn Header="Dist" Binding="{Binding Dist}" Width="80" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Combat">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <Grid Margin="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <Border Background="#1C2333" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Skill search" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="0,0,8,0" />
+                                            <TextBox Width="300" Text="{Binding SkillFilterText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Type skill ID or part of skill name" />
+                                            <CheckBox Content="Only learned skills" IsChecked="{Binding OnlyKnownSkills}" Margin="14,0,0,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding SkillPickerSummary}" Margin="14,0,0,0" VerticalAlignment="Center" Foreground="#8B949E" FontFamily="Consolas" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <WrapPanel Grid.Row="1" Margin="0,10,0,0">
+                                        <CheckBox Content="Use attack skills" IsChecked="{Binding UseCombatSkills}" ToolTip="Cast skills from attack rotation" />
+                                        <CheckBox Content="Move to target (melee mode)" IsChecked="{Binding MoveToTarget}" />
+                                        <CheckBox Content="Move to loot" IsChecked="{Binding MoveToLoot}" />
+                                        <CheckBox Content="Legacy force-flag" IsChecked="{Binding UseForceAttack}" ToolTip="Used only by legacy 0x0A fallback" />
+                                        <CheckBox Content="Allow legacy 0x0A fallback" IsChecked="{Binding UseAttackRequestFallback}" ToolTip="Use AttackRequest only if main Teon transport has no progress" />
+                                        <CheckBox Content="Prefer aggro mobs" IsChecked="{Binding PreferAggroMobs}" />
+                                        <CheckBox Content="Whitelist only" IsChecked="{Binding AttackOnlyWhitelistMobs}" />
+                                        <CheckBox Content="Skip summoned NPCs" IsChecked="{Binding SkipSummonedNpcs}" />
+                                    </WrapPanel>
+
+                                    <Grid Grid.Row="2" Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="10" />
+                                            <ColumnDefinition Width="2*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <UniformGrid Columns="2">
+                                            <TextBlock Text="Melee engage range" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding MeleeEngageRange, UpdateSourceTrigger=PropertyChanged}" />
+
+                                            <TextBlock Text="Retain target max dist" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding RetainCurrentTargetMaxDist, UpdateSourceTrigger=PropertyChanged}" />
+
+                                            <TextBlock Text="Target Z range max" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding TargetZRangeMax, UpdateSourceTrigger=PropertyChanged}" />
+                                        </UniformGrid>
+
+                                        <UniformGrid Grid.Column="2" Columns="2">
+                                            <TextBlock Text="NPC whitelist IDs" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding NpcWhitelistCsv, UpdateSourceTrigger=PropertyChanged}" ToolTip="Example: 20103,20308" />
+
+                                            <TextBlock Text="NPC blacklist IDs" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding NpcBlacklistCsv, UpdateSourceTrigger=PropertyChanged}" ToolTip="Example: 18344,29001" />
+
+                                            <TextBlock Text="Attack transport" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <ComboBox ItemsSource="{Binding AttackPipelineModeOptions}" SelectedItem="{Binding AttackPipelineMode}" />
+
+                                            <TextBlock Text="No-progress window ms" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding AttackNoProgressWindowMs, UpdateSourceTrigger=PropertyChanged}" />
+
+                                            <TextBlock Text="Skill packet" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <ComboBox ItemsSource="{Binding CombatSkillPacketOptions}" SelectedItem="{Binding CombatSkillPacket}" />
+
+                                            <TextBlock Text="Buff packet" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <ComboBox ItemsSource="{Binding BuffSkillPacketOptions}" SelectedItem="{Binding BuffSkillPacket}" />
+
+                                            <TextBlock Text="Magic payload" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <ComboBox ItemsSource="{Binding MagicPayloadOptions}" SelectedItem="{Binding MagicSkillPayload}" />
+                                        </UniformGrid>
+                                    </Grid>
+
+                                    <StackPanel Grid.Row="3" Margin="0,10,0,0">
+                                        <TextBlock Text="Attack rotation" Foreground="#79C0FF" FontSize="13" FontWeight="SemiBold" />
+                                        <WrapPanel Margin="0,6,0,0">
+                                            <TextBlock Text="Skill" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="0,0,6,0" />
+                                            <ComboBox Width="320" ItemsSource="{Binding FilteredSkillPickerOptions}" DisplayMemberPath="Label" SelectedValuePath="SkillId" SelectedValue="{Binding NewAttackSkillId}" />
+                                            <TextBlock Text="Cooldown ms" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                            <TextBox Width="80" Text="{Binding NewAttackCooldownMs, UpdateSourceTrigger=PropertyChanged}" />
+                                            <Button Content="Add Attack Skill" Command="{Binding AddAttackRuleCommand}" />
+                                            <Button Content="Remove Selected" Command="{Binding RemoveAttackRuleCommand}" />
+                                            <Button Content="Move Up" Command="{Binding MoveAttackUpCommand}" />
+                                            <Button Content="Move Down" Command="{Binding MoveAttackDownCommand}" />
+                                        </WrapPanel>
+
+                                        <DataGrid ItemsSource="{Binding AttackRuleRows}" SelectedItem="{Binding SelectedAttackRule}" Height="230" Margin="0,6,0,0">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="#" Binding="{Binding Order}" Width="40" />
+                                                <DataGridTextColumn Header="SkillId" Binding="{Binding SkillId}" Width="90" />
+                                                <DataGridTextColumn Header="Skill" Binding="{Binding SkillName}" Width="*" />
+                                                <DataGridTextColumn Header="Cooldown" Binding="{Binding CooldownMs}" Width="90" />
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </StackPanel>
+
+                                    <Border Grid.Row="4" Background="#1C2333" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,10,0,0">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="10" />
+                                                <ColumnDefinition Width="2*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <UniformGrid Columns="2">
+                                                <TextBlock Text="Enable spoil" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <CheckBox Content="Cast before first attack" IsChecked="{Binding SpoilEnabled}" IsEnabled="{Binding IsSpoilerRole}" Margin="0,0,0,0" />
+
+                                                <TextBlock Text="Spoil skill" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <ComboBox ItemsSource="{Binding FilteredSkillPickerOptions}" DisplayMemberPath="Label" SelectedValuePath="SkillId" SelectedValue="{Binding SpoilSkillId}" IsEnabled="{Binding IsSpoilerRole}" />
+
+                                                <TextBlock Text="Spoil once per target" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <CheckBox Content="No re-cast after success" IsChecked="{Binding SpoilOncePerTarget}" IsEnabled="{Binding IsSpoilerRole}" Margin="0,0,0,0" />
+                                            </UniformGrid>
+
+                                            <UniformGrid Grid.Column="2" Columns="2">
+                                                <TextBlock Grid.ColumnSpan="2" Text="Spoil/Sweep available only for role: Spoiler" Foreground="#8B949E" Margin="0,0,0,6" />
+                                                <TextBlock Text="Enable sweep" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <CheckBox Content="Sweep spoiled corpse" IsChecked="{Binding SweepEnabled}" IsEnabled="{Binding IsSpoilerRole}" Margin="0,0,0,0" />
+
+                                                <TextBlock Text="Sweep skill" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <ComboBox ItemsSource="{Binding FilteredSkillPickerOptions}" DisplayMemberPath="Label" SelectedValuePath="SkillId" SelectedValue="{Binding SweepSkillId}" IsEnabled="{Binding IsSpoilerRole}" />
+
+                                                <TextBlock Text="Sweep retry window ms" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <TextBox Text="{Binding SweepRetryWindowMs, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsSpoilerRole}" />
+
+                                                <TextBlock Text="Sweep retry interval ms" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <TextBox Text="{Binding SweepRetryIntervalMs, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsSpoilerRole}" />
+                                            </UniformGrid>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </ScrollViewer>
+                        </TabItem>
+
+<TabItem Header="Support">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <Grid Margin="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <Border Background="#1C2333" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8">
+                                        <StackPanel>
+                                            <TextBlock Text="Support priorities" Foreground="#79C0FF" FontSize="13" FontWeight="SemiBold" />
+                                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#8B949E" Text="1) Dead-stop: no actions while dead. 2) Critical-hold: survival/self-heal first. 3) Party-heal runs after self-preservation and before normal combat rotation." />
+                                            <UniformGrid Columns="2" Margin="0,8,0,0">
+                                                <TextBlock Text="Dead-stop auto resume HP %" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <TextBox Text="{Binding DeadStopResumeHpPct, UpdateSourceTrigger=PropertyChanged}" />
+
+                                                <TextBlock Text="Self-heal fallback skill" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <ComboBox ItemsSource="{Binding FilteredSkillPickerOptions}" DisplayMemberPath="Label" SelectedValuePath="SkillId" SelectedValue="{Binding SelfHealSkillId}" />
+
+                                                <TextBlock Text="Self-heal fallback HP trigger %" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <TextBox Text="{Binding HealThreshold, UpdateSourceTrigger=PropertyChanged}" />
+                                            </UniformGrid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <WrapPanel Grid.Row="1" Margin="0,10,0,0">
+                                        <TextBlock Text="Self heal skill" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="0,0,6,0" />
+                                        <ComboBox Width="320" ItemsSource="{Binding FilteredSkillPickerOptions}" DisplayMemberPath="Label" SelectedValuePath="SkillId" SelectedValue="{Binding NewHealSkillId}" />
+                                        <TextBlock Text="HP &lt;=" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                        <TextBox Width="60" Text="{Binding NewHealHpBelowPct, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Cooldown ms" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                        <TextBox Width="80" Text="{Binding NewHealCooldownMs, UpdateSourceTrigger=PropertyChanged}" />
+                                        <Button Content="Add Self Rule" Command="{Binding AddHealRuleCommand}" />
+                                        <Button Content="Remove Selected" Command="{Binding RemoveHealRuleCommand}" />
+                                    </WrapPanel>
+
+                                    <DataGrid Grid.Row="2" ItemsSource="{Binding HealRuleRows}" SelectedItem="{Binding SelectedHealRule}" Margin="0,10,0,0" Height="180" AutoGenerateColumns="False" CanUserAddRows="False">
+                                        <DataGrid.Columns>
+                                            <DataGridCheckBoxColumn Header="On" Binding="{Binding Enabled}" Width="46" />
+                                            <DataGridTextColumn Header="HP &lt;=" Binding="{Binding HpBelowPct}" Width="70" />
+                                            <DataGridTextColumn Header="SkillId" Binding="{Binding SkillId}" Width="84" />
+                                            <DataGridTextColumn Header="Skill" Binding="{Binding SkillName}" Width="*" />
+                                            <DataGridTextColumn Header="Min MP%" Binding="{Binding MinMpPct}" Width="72" />
+                                            <DataGridCheckBoxColumn Header="InFight" Binding="{Binding InFight}" Width="64" />
+                                            <DataGridTextColumn Header="CD" Binding="{Binding CooldownMs}" Width="72" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+
+                                    <WrapPanel Grid.Row="3" Margin="0,10,0,0">
+                                        <TextBlock Text="Party heal skill" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="0,0,6,0" />
+                                        <ComboBox Width="300" ItemsSource="{Binding FilteredSkillPickerOptions}" DisplayMemberPath="Label" SelectedValuePath="SkillId" SelectedValue="{Binding NewPartyHealSkillId}" />
+                                        <TextBlock Text="Mode" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                        <ComboBox Width="100" ItemsSource="{Binding PartyHealModeOptions}" SelectedItem="{Binding NewPartyHealMode}" />
+                                        <TextBlock Text="HP &lt;=" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                        <TextBox Width="56" Text="{Binding NewPartyHealHpBelowPct, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Min MP%" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                        <TextBox Width="56" Text="{Binding NewPartyHealMinMpPct, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="CD" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                        <TextBox Width="72" Text="{Binding NewPartyHealCooldownMs, UpdateSourceTrigger=PropertyChanged}" />
+                                        <CheckBox Content="InFight" IsChecked="{Binding NewPartyHealInFight}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                        <Button Content="Add Party Rule" Command="{Binding AddPartyHealRuleCommand}" />
+                                        <Button Content="Remove Selected" Command="{Binding RemovePartyHealRuleCommand}" />
+                                    </WrapPanel>
+
+                                    <DataGrid Grid.Row="4" ItemsSource="{Binding PartyHealRuleRows}" SelectedItem="{Binding SelectedPartyHealRule}" Margin="0,10,0,0" Height="220" AutoGenerateColumns="False" CanUserAddRows="False">
+                                        <DataGrid.Columns>
+                                            <DataGridCheckBoxColumn Header="On" Binding="{Binding Enabled}" Width="46" />
+                                            <DataGridComboBoxColumn Header="Mode"
+                                                                    SelectedItemBinding="{Binding Mode}"
+                                                                    ItemsSource="{Binding DataContext.PartyHealModeOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    Width="90" />
+                                            <DataGridTextColumn Header="HP &lt;=" Binding="{Binding HpBelowPct}" Width="70" />
+                                            <DataGridTextColumn Header="SkillId" Binding="{Binding SkillId}" Width="84" />
+                                            <DataGridTextColumn Header="Skill" Binding="{Binding SkillName}" Width="*" />
+                                            <DataGridTextColumn Header="Min MP%" Binding="{Binding MinMpPct}" Width="72" />
+                                            <DataGridCheckBoxColumn Header="InFight" Binding="{Binding InFight}" Width="64" />
+                                            <DataGridTextColumn Header="CD" Binding="{Binding CooldownMs}" Width="72" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </Grid>
+                            </ScrollViewer>
+                        </TabItem>
+
+<TabItem Header="Party">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <Grid Margin="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Border Background="#1C2333" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8">
+                                        <StackPanel>
+                                            <TextBlock Text="Party behavior" Foreground="#79C0FF" FontSize="13" FontWeight="SemiBold" />
+                                            <WrapPanel Margin="0,8,0,0">
+                                                <CheckBox Content="Enable party support" IsChecked="{Binding PartySupportEnabled}" />
+                                                <CheckBox Content="Assist + Follow (follower mode)" IsChecked="{Binding AssistFollowEnabled}" />
+                                                <CheckBox Content="Leader broadcast (leader mode)" IsChecked="{Binding LeaderBroadcastEnabled}" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Row="1" Background="#1C2333" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,10,0,0">
+                                        <UniformGrid Columns="2">
+                                            <TextBlock Text="Coordinator channel" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding CoordinatorChannel, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Text="Intent stale ms" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding CoordinatorStaleMs, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Text="Follow distance" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding FollowDistance, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Text="Follow tolerance" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding FollowTolerance, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Text="Follow repath ms" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <TextBox Text="{Binding FollowRepathIntervalMs, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Text="Follower fallback to solo" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                            <CheckBox Content="Allow" IsChecked="{Binding FollowerFallbackToStandalone}" Margin="0,0,0,0" />
+                                        </UniformGrid>
+                                    </Border>
+                                    <Border Grid.Row="2" Background="#1C2333" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,10,0,0">
+                                        <TextBlock Text="Run one character as Leader broadcast and others as Follower. Followers auto-assist leader target and keep distance." Foreground="#8B949E" TextWrapping="Wrap" />
+                                    </Border>
+                                </Grid>
+                            </ScrollViewer>
+                        </TabItem>
+
+<TabItem Header="Buffs">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <Grid Margin="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <Border Background="#1C2333" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8">
+                                        <StackPanel>
+                                            <TextBlock Text="Buff setup" Foreground="#79C0FF" FontSize="13" FontWeight="SemiBold" />
+                                            <WrapPanel Margin="0,8,0,0">
+                                                <CheckBox Content="Enable auto-buff" IsChecked="{Binding AutoBuff}" />
+                                                <CheckBox Content="Legacy group buff flag" IsChecked="{Binding GroupBuff}" />
+                                            </WrapPanel>
+                                            <UniformGrid Columns="2" Margin="0,8,0,0">
+                                                <TextBlock Text="Buff packet transport" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <ComboBox ItemsSource="{Binding BuffSkillPacketOptions}" SelectedItem="{Binding BuffSkillPacket}" />
+                                                <TextBlock Text="Hybrid detect" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                                <TextBlock Text="Abnormal if available, else interval fallback" Foreground="#8B949E" />
+                                            </UniformGrid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <WrapPanel Grid.Row="1" Margin="0,10,0,0">
+                                        <TextBlock Text="Skill" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="0,0,6,0" />
+                                        <ComboBox Width="300" ItemsSource="{Binding FilteredSkillPickerOptions}" DisplayMemberPath="Label" SelectedValuePath="SkillId" SelectedValue="{Binding NewBuffSkillId}" />
+                                        <TextBlock Text="Scope" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                        <ComboBox Width="90" ItemsSource="{Binding BuffScopeOptions}" SelectedItem="{Binding NewBuffScope}" />
+                                        <CheckBox Content="AutoDetect" IsChecked="{Binding NewBuffAutoDetect}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="Delay s" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                        <TextBox Width="60" Text="{Binding NewBuffDelaySec, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Min MP%" VerticalAlignment="Center" Foreground="#C9D1D9" Margin="10,0,6,0" />
+                                        <TextBox Width="60" Text="{Binding NewBuffMinMpPct, UpdateSourceTrigger=PropertyChanged}" />
+                                        <CheckBox Content="InFight" IsChecked="{Binding NewBuffInFight}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                        <Button Content="Add Buff Rule" Command="{Binding AddBuffRuleCommand}" />
+                                        <Button Content="Remove Selected" Command="{Binding RemoveBuffRuleCommand}" />
+                                        <Button Content="Move Up" Command="{Binding MoveBuffUpCommand}" />
+                                        <Button Content="Move Down" Command="{Binding MoveBuffDownCommand}" />
+                                    </WrapPanel>
+
+                                    <TextBlock Grid.Row="2" Margin="0,10,0,0" Foreground="#8B949E" TextWrapping="Wrap" Text="Rule order matters. Enable only the buffs you need. Rebuff in fight works only when rule allows InFight and cooldown/delay windows are satisfied." />
+
+                                    <DataGrid Grid.Row="3" ItemsSource="{Binding BuffRuleRows}" SelectedItem="{Binding SelectedBuffRule}" Margin="0,10,0,0" Height="300" AutoGenerateColumns="False" CanUserAddRows="False">
+                                        <DataGrid.Columns>
+                                            <DataGridCheckBoxColumn Header="On" Binding="{Binding Enabled}" Width="46" />
+                                            <DataGridTextColumn Header="SkillId" Binding="{Binding SkillId}" Width="84" />
+                                            <DataGridTextColumn Header="Skill" Binding="{Binding SkillName}" Width="*" />
+                                            <DataGridComboBoxColumn Header="Scope"
+                                                                    SelectedItemBinding="{Binding Scope}"
+                                                                    ItemsSource="{Binding DataContext.BuffScopeOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    Width="90" />
+                                            <DataGridCheckBoxColumn Header="Auto" Binding="{Binding AutoDetect}" Width="56" />
+                                            <DataGridTextColumn Header="Delay(s)" Binding="{Binding DelaySec}" Width="72" />
+                                            <DataGridTextColumn Header="Min MP%" Binding="{Binding MinMpPct}" Width="72" />
+                                            <DataGridCheckBoxColumn Header="InFight" Binding="{Binding InFight}" Width="64" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </Grid>
+                            </ScrollViewer>
+                        </TabItem>
+
+<TabItem Header="Settings">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <Grid Margin="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <WrapPanel>
+                                        <CheckBox Content="Enable auto fight" IsChecked="{Binding AutoFight}" ToolTip="Main combat loop" />
+                                        <CheckBox Content="Enable auto loot" IsChecked="{Binding AutoLoot}" ToolTip="Pickup dropped items" />
+                                        <CheckBox Content="Enable auto heal" IsChecked="{Binding AutoHeal}" ToolTip="Self and party heal rules" />
+                                        <CheckBox Content="Enable auto buff" IsChecked="{Binding AutoBuff}" ToolTip="Use self-buff skill" />
+                                        <CheckBox Content="Enable MP rest" IsChecked="{Binding RestEnabled}" ToolTip="Sit/stand based on MP thresholds" />
+                                    </WrapPanel>
+
+                                    <UniformGrid Grid.Row="1" Columns="2" Margin="0,8,0,0">
+                                        <TextBlock Text="Battle mode" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <ComboBox ItemsSource="{Binding BattleModeOptions}" SelectedItem="{Binding BattleMode}" />
+
+                                        <TextBlock Text="Fight radius" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <TextBox Text="{Binding FightRange, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <TextBlock Text="Hunt center mode" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <ComboBox ItemsSource="{Binding HuntCenterModeOptions}" SelectedItem="{Binding HuntCenterMode}" />
+
+                                        <TextBlock Text="Anchor X" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <TextBox Text="{Binding AnchorX, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <TextBlock Text="Anchor Y" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <TextBox Text="{Binding AnchorY, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <TextBlock Text="Anchor Z" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <TextBox Text="{Binding AnchorZ, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <TextBlock Text="Loot search radius" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <TextBox Text="{Binding LootRange, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <TextBlock Text="Loot pickup radius" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <TextBox Text="{Binding LootPickupRange, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <TextBlock Text="Sit when MP &lt;= %" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <TextBox Text="{Binding SitMpPct, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <TextBlock Text="Stand when MP >= %" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <TextBox Text="{Binding StandMpPct, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <TextBlock Text="ChangeWaitType sit raw" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                                        <ComboBox ItemsSource="{Binding ChangeWaitTypeSitRawOptions}" SelectedItem="{Binding ChangeWaitTypeSitRaw}" />
+                                    </UniformGrid>
+
+                                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                                        <Button Content="Start Bot" Command="{Binding StartBotCommand}" Background="#1F6FEB" BorderBrush="#1F6FEB" />
+                                        <Button Content="Stop Bot" Command="{Binding StopBotCommand}" Background="#EF4444" BorderBrush="#EF4444" />
+                                    </StackPanel>
+                                </Grid>
+                            </ScrollViewer>
+                        </TabItem>
+<TabItem Header="Connections">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="Proxy Endpoints" FontSize="20" FontWeight="SemiBold" />
+                    <UniformGrid Grid.Row="1" Columns="2" Margin="0,10,0,0">
+                        <TextBlock Text="Login host" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                        <TextBox Text="{Binding LoginHost, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <TextBlock Text="Login port" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                        <TextBox Text="{Binding LoginPort, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <TextBlock Text="Game host (fallback)" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                        <TextBox Text="{Binding GameHost, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <TextBlock Text="Game port (fallback)" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                        <TextBox Text="{Binding GamePort, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <TextBlock Text="Local login port" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                        <TextBox Text="{Binding LocalLoginPort, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <TextBlock Text="Local game port" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                        <TextBox Text="{Binding LocalGamePort, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <TextBlock Text="Server profile mode" VerticalAlignment="Center" Foreground="#C9D1D9" />
+                        <ComboBox ItemsSource="{Binding ServerProfileModeOptions}" SelectedItem="{Binding ServerProfileMode}" />
+                    </UniformGrid>
+
+                    <TextBlock Grid.Row="2"
+                               Margin="0,10,0,0"
+                               Foreground="#8B949E"
+                               TextWrapping="Wrap"
+                               Text="1) Start proxy here. 2) Keep hosts file mapping to 127.0.0.1 for shard domains if required. 3) Launch game client and login."/>
+
+                    <Border Grid.Row="3" Background="#21262D" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Live Diagnostics" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Margin="0,6,0,0" Text="{Binding ProxyStateSummary}" FontFamily="Consolas" />
+                            <TextBlock Text="{Binding ProxyTrafficSummary}" FontFamily="Consolas" />
+                            <TextBlock Text="{Binding ProxyEndpointSummary}" FontFamily="Consolas" />
+                            <TextBlock Text="{Binding LastErrorSummary}" FontFamily="Consolas" Foreground="#FFA198" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="4" Background="#1C2333" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,10,0,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Copy Logs" Command="{Binding CopyLogsCommand}" />
+                                <Button Content="Export Logs" Command="{Binding ExportLogsCommand}" />
+                                <Button Content="Clear Logs" Command="{Binding ClearLogsCommand}" />
+                            </StackPanel>
+
+                            <ListBox Grid.Row="1"
+                                     x:Name="LogList"
+                                     ItemsSource="{Binding Logs}"
+                                     Background="#0D1117"
+                                     BorderBrush="#6D727A"
+                                     Foreground="#E6EDF3"
+                                     VirtualizingPanel.IsVirtualizing="True"
+                                     VirtualizingPanel.VirtualizationMode="Recycling"
+                                     ScrollViewer.CanContentScroll="True">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock FontFamily="Consolas" FontSize="12">
+                                            <Run Text="{Binding Time, StringFormat={}{0:HH:mm:ss}}" />
+                                            <Run Text="  " />
+                                            <Run Text="{Binding Message}" />
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

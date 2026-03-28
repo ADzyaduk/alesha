@@ -1,0 +1,6 @@
+C:\pj\alesha\out-latest-next8\L2Companion.exe
+C:\pj\alesha\out-latest-next8\L2Companion.dll
+C:\pj\alesha\out-latest-next8\L2Companion.deps.json
+C:\pj\alesha\out-latest-next8\L2Companion.runtimeconfig.json
+C:\pj\alesha\out-latest-next8\L2Companion.pdb
+C:\pj\alesha\out-latest-next8\BouncyCastle.Cryptography.dll

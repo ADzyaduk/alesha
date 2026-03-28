@@ -1,0 +1,10 @@
+{
+  "LoginHost": "51.38.238.76",
+  "LoginPort": 2106,
+  "GameHost": "51.38.238.76",
+  "GamePort": 7777,
+  "LocalLoginPort": 2106,
+  "LocalGamePort": 7777,
+  "OnlyKnownSkills": true,
+  "ServerProfileMode": 0
+}
