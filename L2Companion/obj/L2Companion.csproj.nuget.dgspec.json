@@ -1,31 +1,31 @@
 {
   "format": 1,
   "restore": {
-    "c:\\pj\\alesha\\L2Companion\\L2Companion.csproj": {}
+    "C:\\pj\\alesha\\L2Companion\\L2Companion.csproj": {}
   },
   "projects": {
-    "c:\\pj\\alesha\\L2Companion\\L2Companion.csproj": {
+    "C:\\pj\\alesha\\L2Companion\\L2Companion.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "c:\\pj\\alesha\\L2Companion\\L2Companion.csproj",
+        "projectUniqueName": "C:\\pj\\alesha\\L2Companion\\L2Companion.csproj",
         "projectName": "L2Companion",
-        "projectPath": "c:\\pj\\alesha\\L2Companion\\L2Companion.csproj",
+        "projectPath": "C:\\pj\\alesha\\L2Companion\\L2Companion.csproj",
         "packagesPath": "C:\\Users\\KaZa\\.nuget\\packages\\",
-        "outputPath": "c:\\pj\\alesha\\L2Companion\\obj\\",
+        "outputPath": "C:\\pj\\alesha\\L2Companion\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "c:\\pj\\alesha\\NuGet.Config",
+          "C:\\pj\\alesha\\NuGet.Config",
           "C:\\Users\\KaZa\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
-          "net8.0-windows"
+          "net9.0-windows"
         ],
         "sources": {
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
-          "net8.0-windows7.0": {
-            "targetAlias": "net8.0-windows",
+          "net9.0-windows7.0": {
+            "targetAlias": "net9.0-windows",
             "projectReferences": {}
           }
         },
@@ -42,12 +42,16 @@
         "SdkAnalysisLevel": "10.0.200"
       },
       "frameworks": {
-        "net8.0-windows7.0": {
-          "targetAlias": "net8.0-windows",
+        "net9.0-windows7.0": {
+          "targetAlias": "net9.0-windows",
           "dependencies": {
             "BouncyCastle.Cryptography": {
               "target": "Package",
               "version": "[2.5.1, )"
+            },
+            "CommunityToolkit.Mvvm": {
+              "target": "Package",
+              "version": "[8.4.2, )"
             }
           },
           "imports": [
@@ -64,19 +68,19 @@
           "downloadDependencies": [
             {
               "name": "Microsoft.AspNetCore.App.Ref",
-              "version": "[8.0.25, 8.0.25]"
+              "version": "[9.0.14, 9.0.14]"
             },
             {
               "name": "Microsoft.NETCore.App.Host.win-x64",
-              "version": "[8.0.25, 8.0.25]"
+              "version": "[9.0.14, 9.0.14]"
             },
             {
               "name": "Microsoft.NETCore.App.Ref",
-              "version": "[8.0.25, 8.0.25]"
+              "version": "[9.0.14, 9.0.14]"
             },
             {
               "name": "Microsoft.WindowsDesktop.App.Ref",
-              "version": "[8.0.25, 8.0.25]"
+              "version": "[9.0.14, 9.0.14]"
             }
           ],
           "frameworkReferences": {

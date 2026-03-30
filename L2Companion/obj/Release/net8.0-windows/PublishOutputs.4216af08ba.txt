@@ -1,6 +1,0 @@
-C:\pj\alesha\out-latest-themefix\L2Companion.exe
-C:\pj\alesha\out-latest-themefix\L2Companion.dll
-C:\pj\alesha\out-latest-themefix\L2Companion.deps.json
-C:\pj\alesha\out-latest-themefix\L2Companion.runtimeconfig.json
-C:\pj\alesha\out-latest-themefix\L2Companion.pdb
-C:\pj\alesha\out-latest-themefix\BouncyCastle.Cryptography.dll

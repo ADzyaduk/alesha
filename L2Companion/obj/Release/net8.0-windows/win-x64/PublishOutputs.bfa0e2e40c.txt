@@ -1,2 +1,0 @@
-C:\pj\alesha\L2Companion\bin\Release\selfcontained-win64\L2Companion.pdb
-C:\pj\alesha\L2Companion\bin\Release\selfcontained-win64\L2Companion.exe

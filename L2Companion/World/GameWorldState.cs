@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Threading;
 
 namespace L2Companion.World;
@@ -30,6 +30,42 @@ public sealed class GameWorldState
     public byte? SessionOpcodeXorKey { get; set; }
     public bool EnteredWorld { get; set; }
     public int ChangeWaitTypeSitRaw { get; set; } = 0;
+    /// <summary>Copied from bot settings so packet parser can size self-cast lock without referencing <c>BotEngine</c>.</summary>
+    public int SelfCastLockDurationMs { get; set; } = 900;
+
+    /// <summary>Last mob death position we care about for loot (current target or kill credited). Set from Die packet.</summary>
+    public void SetLootCorpseAnchor(int x, int y, int z, DateTime utcNow)
+    {
+        lock (_gate)
+        {
+            LastLootCorpseX = x;
+            LastLootCorpseY = y;
+            LastLootCorpseZ = z;
+            LastLootCorpseUtc = utcNow;
+        }
+    }
+
+    public bool TryGetLootCorpseAnchor(TimeSpan maxAge, out int x, out int y, out int z)
+    {
+        lock (_gate)
+        {
+            if (LastLootCorpseUtc == DateTime.MinValue || (DateTime.UtcNow - LastLootCorpseUtc) > maxAge)
+            {
+                x = y = z = 0;
+                return false;
+            }
+
+            x = LastLootCorpseX;
+            y = LastLootCorpseY;
+            z = LastLootCorpseZ;
+            return true;
+        }
+    }
+
+    private int LastLootCorpseX { get; set; }
+    private int LastLootCorpseY { get; set; }
+    private int LastLootCorpseZ { get; set; }
+    private DateTime LastLootCorpseUtc { get; set; }
 
     public DateTime LastMutationUtc => new(Interlocked.Read(ref _lastMutationTicks), DateTimeKind.Utc);
     public DateTime LastUserInfoAtUtc => ReadUtc(_lastUserInfoTicks);
@@ -67,6 +103,7 @@ public sealed class GameWorldState
             SkillCooldownReadyAtUtc.Clear();
             Me.AbnormalEffectSkillIds.Clear();
             Me.AbnormalUpdatedAtUtc = DateTime.MinValue;
+            Me.CastingUntilUtc = DateTime.MinValue;
         });
     }
 
@@ -149,7 +186,8 @@ public enum WorldMutationType
     Status,
     Npc,
     Loot,
-    Target
+    Target,
+    Party
 }
 
 

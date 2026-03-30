@@ -1,4 +1,3 @@
-﻿
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -12,7 +11,7 @@ using L2Companion.World;
 
 namespace L2Companion.UI;
 
-public sealed class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ObservableObject
 {
     private readonly LogService _log;
     private readonly ProxyService _proxy;
@@ -36,6 +35,7 @@ public sealed class MainViewModel : ObservableObject
     private bool _autoLoot;
     private bool _groupBuff;
     private bool _autoHeal;
+    private bool _autoRecharge;
 
     private int _selfHealSkillId;
     private int _groupHealSkillId;
@@ -52,6 +52,8 @@ public sealed class MainViewModel : ObservableObject
     private bool _restEnabled = true;
     private int _sitMpPct = 15;
     private int _standMpPct = 45;
+    private int _restSitHpPct;
+    private int _restStandHpPct;
     private int _changeWaitTypeSitRaw;
     private bool _partySupportEnabled = true;
     private int _partyHealHpThreshold = 55;
@@ -82,6 +84,8 @@ public sealed class MainViewModel : ObservableObject
     private CoordMode _coordMode = CoordMode.Standalone;
     private bool _enableRoleCoordinator;
     private bool _enableCombatFsmV2 = true;
+    private bool _verboseCombatSkillLog;
+    private int _selfCastLockDurationMs = 900;
     private bool _enableCasterV2 = true;
     private bool _enableSupportV2 = true;
     private string _coordinatorChannel = "l2companion_combat_v2";
@@ -109,7 +113,9 @@ public sealed class MainViewModel : ObservableObject
     private int _postKillLootMaxAttempts = 10;
     private int _postKillLootItemRetry = 2;
     private int _postKillSpawnWaitMs = 140;
-    private int _spoilMaxAttemptsPerTarget = 2;
+    private int _spoilMaxAttemptsPerTarget = 12;
+    private int _spoilRetryIntervalMs = 1500;
+    private int _spoilMaxCastDistance = 600;
     private int _criticalHoldEnterHpPct = 30;
     private int _criticalHoldResumeHpPct = 50;
     private int _deadStopResumeHpPct = 30;
@@ -130,6 +136,12 @@ public sealed class MainViewModel : ObservableObject
     private bool _newPartyHealInFight = true;
     private PartyHealRuleRow? _selectedPartyHealRule;
 
+    private int _newRechargeSkillId;
+    private int _newRechargeMpBelowPct = 40;
+    private int _newRechargeCooldownMs = 1200;
+    private int _newRechargeMinSelfMpPct = 20;
+    private RechargeRuleRow? _selectedRechargeRule;
+
     private bool _preferAggroMobs = true;
     private int _retainCurrentTargetMaxDist = 650;
     private bool _attackOnlyWhitelistMobs;
@@ -144,6 +156,14 @@ public sealed class MainViewModel : ObservableObject
 
     private int _newAttackSkillId;
     private int _newAttackCooldownMs = 1200;
+    private int _newAttackPriority;
+    private int _newAttackMinMpPct;
+    private int _newAttackMaxMpPct;
+    private int _newAttackTargetHpBelowPct;
+    private int _newAttackTargetHpAbovePct;
+    private int _newAttackSkipAbnormalSkillId;
+    private int _newAttackMaxCastRange;
+    private bool _newAttackRuleEnabled = true;
 
     private HealRuleRow? _selectedHealRule;
     private AttackRuleRow? _selectedAttackRule;
@@ -191,6 +211,7 @@ public sealed class MainViewModel : ObservableObject
         BuffRuleRows = [];
         PartyHealRuleRows = [];
         AttackRuleRows = [];
+        RechargeRuleRows = [];
 
         CombatSkillPacketOptions = ["39", "2f"];
         BuffSkillPacketOptions = ["39", "2f"];
@@ -221,6 +242,9 @@ public sealed class MainViewModel : ObservableObject
         AddPartyHealRuleCommand = new RelayCommand(_ => AddPartyHealRule(), _ => NewPartyHealSkillId > 0 && NewPartyHealHpBelowPct > 0);
         RemovePartyHealRuleCommand = new RelayCommand(_ => RemoveSelectedPartyHealRule(), _ => SelectedPartyHealRule is not null);
 
+        AddRechargeRuleCommand = new RelayCommand(_ => AddRechargeRule(), _ => NewRechargeSkillId > 0 && NewRechargeMpBelowPct > 0);
+        RemoveRechargeRuleCommand = new RelayCommand(_ => RemoveSelectedRechargeRule(), _ => SelectedRechargeRule is not null);
+
         AddAttackRuleCommand = new RelayCommand(_ => AddAttackRule(), _ => NewAttackSkillId > 0);
         RemoveAttackRuleCommand = new RelayCommand(_ => RemoveSelectedAttackRule(), _ => SelectedAttackRule is not null);
         MoveAttackUpCommand = new RelayCommand(_ => MoveSelectedAttack(-1), _ => CanMoveAttack(-1));
@@ -243,6 +267,7 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<BuffRuleRow> BuffRuleRows { get; }
     public ObservableCollection<PartyHealRuleRow> PartyHealRuleRows { get; }
     public ObservableCollection<AttackRuleRow> AttackRuleRows { get; }
+    public ObservableCollection<RechargeRuleRow> RechargeRuleRows { get; }
 
     public IReadOnlyList<string> CombatSkillPacketOptions { get; }
     public IReadOnlyList<string> BuffSkillPacketOptions { get; }
@@ -319,53 +344,13 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand MoveBuffDownCommand { get; }
     public RelayCommand AddPartyHealRuleCommand { get; }
     public RelayCommand RemovePartyHealRuleCommand { get; }
+    public RelayCommand AddRechargeRuleCommand { get; }
+    public RelayCommand RemoveRechargeRuleCommand { get; }
     public RelayCommand AddAttackRuleCommand { get; }
     public RelayCommand RemoveAttackRuleCommand { get; }
     public RelayCommand MoveAttackUpCommand { get; }
     public RelayCommand MoveAttackDownCommand { get; }
     public bool IsSpoilerRole => Role == BotRole.Spoiler;
-    public bool SpoilControlsEnabled => IsSpoilerRole;
-
-    private void EnforceRoleBasedSpoilPolicy(bool logChange = true)
-    {
-        if (IsSpoilerRole)
-        {
-            return;
-        }
-
-        var changed = false;
-        if (_spoilEnabled)
-        {
-            _spoilEnabled = false;
-            changed = true;
-        }
-
-        if (_sweepEnabled)
-        {
-            _sweepEnabled = false;
-            changed = true;
-        }
-
-        if (_postKillSweepEnabled)
-        {
-            _postKillSweepEnabled = false;
-            changed = true;
-        }
-
-        if (!changed)
-        {
-            return;
-        }
-
-        NotifyPropertyChanged(nameof(SpoilEnabled));
-        NotifyPropertyChanged(nameof(SweepEnabled));
-        NotifyPropertyChanged(nameof(PostKillSweepEnabled));
-
-        if (logChange && !_loadingState)
-        {
-            _log.Info("[BotUI] Spoil/Sweep auto-disabled for non-spoiler role.");
-        }
-    }
 
     public string LoginHost { get => _loginHost; set { if (SetProperty(ref _loginHost, value)) SaveState(); } }
     public int LoginPort { get => _loginPort; set { if (SetProperty(ref _loginPort, value)) SaveState(); } }
@@ -379,6 +364,7 @@ public sealed class MainViewModel : ObservableObject
     public bool AutoLoot { get => _autoLoot; set { if (SetProperty(ref _autoLoot, value)) { ApplyBotSettings(); SaveState(); } } }
     public bool GroupBuff { get => _groupBuff; set { if (SetProperty(ref _groupBuff, value)) { ApplyBotSettings(); SaveState(); } } }
     public bool AutoHeal { get => _autoHeal; set { if (SetProperty(ref _autoHeal, value)) { ApplyBotSettings(); SaveState(); } } }
+    public bool AutoRecharge { get => _autoRecharge; set { if (SetProperty(ref _autoRecharge, value)) { ApplyBotSettings(); SaveState(); } } }
 
     public int SelfHealSkillId { get => _selfHealSkillId; set { if (SetProperty(ref _selfHealSkillId, value)) { ApplyBotSettings(); SaveState(); } } }
     public int GroupHealSkillId { get => _groupHealSkillId; set { if (SetProperty(ref _groupHealSkillId, value)) { ApplyBotSettings(); SaveState(); } } }
@@ -455,6 +441,8 @@ public sealed class MainViewModel : ObservableObject
     public bool RestEnabled { get => _restEnabled; set { if (SetProperty(ref _restEnabled, value)) { ApplyBotSettings(); SaveState(); } } }
     public int SitMpPct { get => _sitMpPct; set { if (SetProperty(ref _sitMpPct, value)) { ApplyBotSettings(); SaveState(); } } }
     public int StandMpPct { get => _standMpPct; set { if (SetProperty(ref _standMpPct, value)) { ApplyBotSettings(); SaveState(); } } }
+    public int RestSitHpPct { get => _restSitHpPct; set { if (SetProperty(ref _restSitHpPct, value)) { ApplyBotSettings(); SaveState(); } } }
+    public int RestStandHpPct { get => _restStandHpPct; set { if (SetProperty(ref _restStandHpPct, value)) { ApplyBotSettings(); SaveState(); } } }
     public int ChangeWaitTypeSitRaw { get => _changeWaitTypeSitRaw; set { if (SetProperty(ref _changeWaitTypeSitRaw, value)) { ApplyBotSettings(); SaveState(); } } }
     public bool PartySupportEnabled { get => _partySupportEnabled; set { if (SetProperty(ref _partySupportEnabled, value)) { ApplyBotSettings(); SaveState(); } } }
     public int PartyHealHpThreshold { get => _partyHealHpThreshold; set { if (SetProperty(ref _partyHealHpThreshold, value)) { ApplyBotSettings(); SaveState(); } } }
@@ -514,6 +502,45 @@ public sealed class MainViewModel : ObservableObject
     public int NewPartyHealCooldownMs { get => _newPartyHealCooldownMs; set => SetProperty(ref _newPartyHealCooldownMs, value); }
     public bool NewPartyHealInFight { get => _newPartyHealInFight; set => SetProperty(ref _newPartyHealInFight, value); }
 
+    public int NewRechargeSkillId
+    {
+        get => _newRechargeSkillId;
+        set
+        {
+            if (SetProperty(ref _newRechargeSkillId, value))
+            {
+                AddRechargeRuleCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public int NewRechargeMpBelowPct
+    {
+        get => _newRechargeMpBelowPct;
+        set
+        {
+            if (SetProperty(ref _newRechargeMpBelowPct, value))
+            {
+                AddRechargeRuleCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public int NewRechargeCooldownMs { get => _newRechargeCooldownMs; set => SetProperty(ref _newRechargeCooldownMs, value); }
+    public int NewRechargeMinSelfMpPct { get => _newRechargeMinSelfMpPct; set => SetProperty(ref _newRechargeMinSelfMpPct, value); }
+
+    public RechargeRuleRow? SelectedRechargeRule
+    {
+        get => _selectedRechargeRule;
+        set
+        {
+            if (SetProperty(ref _selectedRechargeRule, value))
+            {
+                RemoveRechargeRuleCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
     public bool MoveToTarget { get => _moveToTarget; set { if (SetProperty(ref _moveToTarget, value)) { ApplyBotSettings(); SaveState(); } } }
     public int MeleeEngageRange { get => _meleeEngageRange; set { if (SetProperty(ref _meleeEngageRange, value)) { ApplyBotSettings(); SaveState(); } } }
     public bool MoveToLoot { get => _moveToLoot; set { if (SetProperty(ref _moveToLoot, value)) { ApplyBotSettings(); SaveState(); } } }
@@ -537,7 +564,7 @@ public sealed class MainViewModel : ObservableObject
     public int AttackNoProgressWindowMs { get => _attackNoProgressWindowMs; set { if (SetProperty(ref _attackNoProgressWindowMs, value)) { ApplyBotSettings(); SaveState(); } } }
     public int CasterChaseRange { get => _casterChaseRange; set { if (SetProperty(ref _casterChaseRange, value)) { ApplyBotSettings(); SaveState(); } } }
     public int CasterCastIntervalMs { get => _casterCastIntervalMs; set { if (SetProperty(ref _casterCastIntervalMs, value)) { ApplyBotSettings(); SaveState(); } } }
-    public BotRole Role { get => _role; set { if (SetProperty(ref _role, value)) { EnforceRoleBasedSpoilPolicy(); NotifyPropertyChanged(nameof(IsSpoilerRole)); NotifyPropertyChanged(nameof(SpoilControlsEnabled)); ApplyBotSettings(); SaveState(); } } }
+    public BotRole Role { get => _role; set { if (SetProperty(ref _role, value)) { NotifyPropertyChanged(nameof(IsSpoilerRole)); ApplyBotSettings(); SaveState(); } } }
     public CoordMode CoordMode
     {
         get => _coordMode;
@@ -571,6 +598,8 @@ public sealed class MainViewModel : ObservableObject
         }
     }
     public bool EnableCombatFsmV2 { get => _enableCombatFsmV2; set { if (SetProperty(ref _enableCombatFsmV2, value)) { ApplyBotSettings(); SaveState(); } } }
+    public bool VerboseCombatSkillLog { get => _verboseCombatSkillLog; set { if (SetProperty(ref _verboseCombatSkillLog, value)) { ApplyBotSettings(); SaveState(); } } }
+    public int SelfCastLockDurationMs { get => _selfCastLockDurationMs; set { if (SetProperty(ref _selfCastLockDurationMs, value)) { ApplyBotSettings(); SaveState(); } } }
     public bool EnableCasterV2 { get => _enableCasterV2; set { if (SetProperty(ref _enableCasterV2, value)) { ApplyBotSettings(); SaveState(); } } }
     public bool EnableSupportV2 { get => _enableSupportV2; set { if (SetProperty(ref _enableSupportV2, value)) { ApplyBotSettings(); SaveState(); } } }
     public string CoordinatorChannel { get => _coordinatorChannel; set { if (SetProperty(ref _coordinatorChannel, value)) { ApplyBotSettings(); SaveState(); } } }
@@ -678,17 +707,19 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    public bool SpoilEnabled { get => _spoilEnabled; set { var normalized = IsSpoilerRole && value; if (SetProperty(ref _spoilEnabled, normalized)) { ApplyBotSettings(); SaveState(); } } }
+    public bool SpoilEnabled { get => _spoilEnabled; set { if (SetProperty(ref _spoilEnabled, value)) { ApplyBotSettings(); SaveState(); } } }
     public int SpoilSkillId { get => _spoilSkillId; set { if (SetProperty(ref _spoilSkillId, value)) { ApplyBotSettings(); SaveState(); } } }
     public bool SpoilOncePerTarget { get => _spoilOncePerTarget; set { if (SetProperty(ref _spoilOncePerTarget, value)) { ApplyBotSettings(); SaveState(); } } }
     public int SpoilMaxAttemptsPerTarget { get => _spoilMaxAttemptsPerTarget; set { if (SetProperty(ref _spoilMaxAttemptsPerTarget, value)) { ApplyBotSettings(); SaveState(); } } }
-    public bool SweepEnabled { get => _sweepEnabled; set { var normalized = IsSpoilerRole && value; if (SetProperty(ref _sweepEnabled, normalized)) { ApplyBotSettings(); SaveState(); } } }
+    public int SpoilRetryIntervalMs { get => _spoilRetryIntervalMs; set { if (SetProperty(ref _spoilRetryIntervalMs, value)) { ApplyBotSettings(); SaveState(); } } }
+    public int SpoilMaxCastDistance { get => _spoilMaxCastDistance; set { if (SetProperty(ref _spoilMaxCastDistance, value)) { ApplyBotSettings(); SaveState(); } } }
+    public bool SweepEnabled { get => _sweepEnabled; set { if (SetProperty(ref _sweepEnabled, value)) { ApplyBotSettings(); SaveState(); } } }
     public int SweepSkillId { get => _sweepSkillId; set { if (SetProperty(ref _sweepSkillId, value)) { ApplyBotSettings(); SaveState(); } } }
     public int SweepRetryWindowMs { get => _sweepRetryWindowMs; set { if (SetProperty(ref _sweepRetryWindowMs, value)) { ApplyBotSettings(); SaveState(); } } }
     public int SweepRetryIntervalMs { get => _sweepRetryIntervalMs; set { if (SetProperty(ref _sweepRetryIntervalMs, value)) { ApplyBotSettings(); SaveState(); } } }
     public bool FinishCurrentTargetBeforeAggroRetarget { get => _finishCurrentTargetBeforeAggroRetarget; set { if (SetProperty(ref _finishCurrentTargetBeforeAggroRetarget, value)) { ApplyBotSettings(); SaveState(); } } }
     public int KillTimeoutMs { get => _killTimeoutMs; set { if (SetProperty(ref _killTimeoutMs, value)) { ApplyBotSettings(); SaveState(); } } }
-    public bool PostKillSweepEnabled { get => _postKillSweepEnabled; set { var normalized = IsSpoilerRole && value; if (SetProperty(ref _postKillSweepEnabled, normalized)) { ApplyBotSettings(); SaveState(); } } }
+    public bool PostKillSweepEnabled { get => _postKillSweepEnabled; set { if (SetProperty(ref _postKillSweepEnabled, value)) { ApplyBotSettings(); SaveState(); } } }
     public int PostKillSweepRetryWindowMs { get => _postKillSweepRetryWindowMs; set { if (SetProperty(ref _postKillSweepRetryWindowMs, value)) { ApplyBotSettings(); SaveState(); } } }
     public int PostKillSweepRetryIntervalMs { get => _postKillSweepRetryIntervalMs; set { if (SetProperty(ref _postKillSweepRetryIntervalMs, value)) { ApplyBotSettings(); SaveState(); } } }
     public int PostKillSweepMaxAttempts { get => _postKillSweepMaxAttempts; set { if (SetProperty(ref _postKillSweepMaxAttempts, value)) { ApplyBotSettings(); SaveState(); } } }
@@ -802,6 +833,14 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public int NewAttackCooldownMs { get => _newAttackCooldownMs; set => SetProperty(ref _newAttackCooldownMs, value); }
+    public int NewAttackPriority { get => _newAttackPriority; set => SetProperty(ref _newAttackPriority, value); }
+    public int NewAttackMinMpPct { get => _newAttackMinMpPct; set => SetProperty(ref _newAttackMinMpPct, value); }
+    public int NewAttackMaxMpPct { get => _newAttackMaxMpPct; set => SetProperty(ref _newAttackMaxMpPct, value); }
+    public int NewAttackTargetHpBelowPct { get => _newAttackTargetHpBelowPct; set => SetProperty(ref _newAttackTargetHpBelowPct, value); }
+    public int NewAttackTargetHpAbovePct { get => _newAttackTargetHpAbovePct; set => SetProperty(ref _newAttackTargetHpAbovePct, value); }
+    public int NewAttackSkipAbnormalSkillId { get => _newAttackSkipAbnormalSkillId; set => SetProperty(ref _newAttackSkipAbnormalSkillId, value); }
+    public int NewAttackMaxCastRange { get => _newAttackMaxCastRange; set => SetProperty(ref _newAttackMaxCastRange, value); }
+    public bool NewAttackRuleEnabled { get => _newAttackRuleEnabled; set => SetProperty(ref _newAttackRuleEnabled, value); }
 
     public HealRuleRow? SelectedHealRule
     {
@@ -1241,6 +1280,11 @@ public sealed class MainViewModel : ObservableObject
         {
             row.SkillName = ResolveSkillName(row.SkillId);
         }
+
+        foreach (var row in RechargeRuleRows)
+        {
+            row.SkillName = ResolveSkillName(row.SkillId);
+        }
     }
 
     private void AddHealRule()
@@ -1396,6 +1440,41 @@ public sealed class MainViewModel : ObservableObject
         ApplyBotSettings();
         SaveState();
     }
+
+    private void AddRechargeRule()
+    {
+        if (NewRechargeSkillId <= 0 || NewRechargeMpBelowPct <= 0)
+        {
+            return;
+        }
+
+        RechargeRuleRows.Add(new RechargeRuleRow
+        {
+            SkillId = NewRechargeSkillId,
+            SkillName = ResolveSkillName(NewRechargeSkillId),
+            MpBelowPct = Math.Max(1, Math.Min(99, NewRechargeMpBelowPct)),
+            CooldownMs = Math.Max(250, NewRechargeCooldownMs),
+            MinSelfMpPct = Math.Max(0, Math.Min(99, NewRechargeMinSelfMpPct)),
+            Enabled = true
+        });
+
+        ApplyBotSettings();
+        SaveState();
+    }
+
+    private void RemoveSelectedRechargeRule()
+    {
+        if (SelectedRechargeRule is null)
+        {
+            return;
+        }
+
+        RechargeRuleRows.Remove(SelectedRechargeRule);
+        SelectedRechargeRule = null;
+        ApplyBotSettings();
+        SaveState();
+    }
+
     private void AddAttackRule()
     {
         if (NewAttackSkillId <= 0)
@@ -1408,7 +1487,15 @@ public sealed class MainViewModel : ObservableObject
             Order = AttackRuleRows.Count + 1,
             SkillId = NewAttackSkillId,
             SkillName = ResolveSkillName(NewAttackSkillId),
-            CooldownMs = Math.Max(250, NewAttackCooldownMs)
+            CooldownMs = Math.Max(250, NewAttackCooldownMs),
+            Enabled = NewAttackRuleEnabled,
+            Priority = NewAttackPriority,
+            MinMpPct = Math.Max(0, Math.Min(99, NewAttackMinMpPct)),
+            MaxMpPct = Math.Max(0, Math.Min(99, NewAttackMaxMpPct)),
+            TargetHpBelowPct = Math.Max(0, Math.Min(100, NewAttackTargetHpBelowPct)),
+            TargetHpAbovePct = Math.Max(0, Math.Min(100, NewAttackTargetHpAbovePct)),
+            SkipIfTargetHasAbnormalSkillId = Math.Max(0, NewAttackSkipAbnormalSkillId),
+            MaxCastRange = Math.Max(0, NewAttackMaxCastRange)
         });
 
         ReindexAttackRules();
@@ -1595,6 +1682,15 @@ public sealed class MainViewModel : ObservableObject
         _lastBotToggleAtUtc = now;
         ApplyBotSettings();
         _log.Info($"StartBot requested: AutoFight={AutoFight} Role={Role} BattleMode={BattleMode} Coord={CoordMode} Spoil={SpoilEnabled} Sweep={SweepEnabled}");
+        if (AutoFight && !SpoilEnabled)
+        {
+            _log.Info("[AutoFight] Spoil выключен (галочка «Cast before first attack») — открывающий спойл не кастуется. Включите её, если нужен спойл перед первым ударом.");
+            if (SweepEnabled)
+            {
+                _log.Info("[AutoFight] Sweep включён при выключенном Spoil: свип по трупу сработает только если моб был заспойлен вручную или с другого источника.");
+            }
+        }
+
         _bot.Start();
         Status = "Bot running";
         RaiseCommands();
@@ -1623,6 +1719,7 @@ public sealed class MainViewModel : ObservableObject
         _bot.Settings.AutoLoot = AutoLoot;
         _bot.Settings.GroupBuff = GroupBuff;
         _bot.Settings.AutoHeal = AutoHeal;
+        _bot.Settings.AutoRecharge = AutoRecharge;
         _bot.Settings.SelfHealSkillId = SelfHealSkillId;
         _bot.Settings.GroupHealSkillId = GroupHealSkillId;
         _bot.Settings.BuffSkillId = BuffSkillId;
@@ -1638,6 +1735,8 @@ public sealed class MainViewModel : ObservableObject
         _bot.Settings.RestEnabled = RestEnabled;
         _bot.Settings.SitMpPct = Math.Max(1, Math.Min(95, SitMpPct));
         _bot.Settings.StandMpPct = Math.Max(_bot.Settings.SitMpPct + 1, Math.Min(100, StandMpPct));
+        _bot.Settings.RestSitHpPct = Math.Max(0, Math.Min(99, RestSitHpPct));
+        _bot.Settings.RestStandHpPct = Math.Max(_bot.Settings.RestSitHpPct + 1, Math.Min(100, RestStandHpPct));
         _bot.Settings.ChangeWaitTypeSitRaw = NormalizeChangeWaitTypeSitRaw(ChangeWaitTypeSitRaw);
         _world.ChangeWaitTypeSitRaw = _bot.Settings.ChangeWaitTypeSitRaw;
         _bot.Settings.PartySupportEnabled = PartySupportEnabled;
@@ -1672,6 +1771,8 @@ public sealed class MainViewModel : ObservableObject
         _bot.Settings.CoordMode = CoordMode;
         _bot.Settings.EnableRoleCoordinator = EnableRoleCoordinator;
         _bot.Settings.EnableCombatFsmV2 = EnableCombatFsmV2;
+        _bot.Settings.VerboseCombatSkillLog = VerboseCombatSkillLog;
+        _bot.Settings.SelfCastLockDurationMs = Math.Max(120, SelfCastLockDurationMs);
         _bot.Settings.EnableCasterV2 = EnableCasterV2;
         _bot.Settings.EnableSupportV2 = EnableSupportV2;
         _bot.Settings.CoordinatorChannel = string.IsNullOrWhiteSpace(CoordinatorChannel) ? "l2companion_combat_v2" : CoordinatorChannel.Trim();
@@ -1682,18 +1783,19 @@ public sealed class MainViewModel : ObservableObject
         _bot.Settings.FollowerFallbackToStandalone = FollowerFallbackToStandalone;
         _bot.Settings.SupportAllowDamage = SupportAllowDamage;
 
-        var roleAllowsSpoil = Role == BotRole.Spoiler;
-        _bot.Settings.SpoilEnabled = roleAllowsSpoil && SpoilEnabled;
+        _bot.Settings.SpoilEnabled = SpoilEnabled;
         _bot.Settings.SpoilSkillId = SpoilSkillId;
         _bot.Settings.SpoilOncePerTarget = SpoilOncePerTarget;
         _bot.Settings.SpoilMaxAttemptsPerTarget = Math.Max(1, SpoilMaxAttemptsPerTarget);
-        _bot.Settings.SweepEnabled = roleAllowsSpoil && SweepEnabled;
+        _bot.Settings.SpoilRetryIntervalMs = SpoilRetryIntervalMs < 500 ? 1500 : SpoilRetryIntervalMs;
+        _bot.Settings.SpoilMaxCastDistance = SpoilMaxCastDistance < 80 ? 600 : SpoilMaxCastDistance;
+        _bot.Settings.SweepEnabled = SweepEnabled;
         _bot.Settings.SweepSkillId = SweepSkillId;
         _bot.Settings.SweepRetryWindowMs = Math.Max(500, SweepRetryWindowMs);
         _bot.Settings.SweepRetryIntervalMs = Math.Max(120, SweepRetryIntervalMs);
         _bot.Settings.FinishCurrentTargetBeforeAggroRetarget = FinishCurrentTargetBeforeAggroRetarget;
         _bot.Settings.KillTimeoutMs = Math.Max(25000, KillTimeoutMs);
-        _bot.Settings.PostKillSweepEnabled = roleAllowsSpoil && PostKillSweepEnabled;
+        _bot.Settings.PostKillSweepEnabled = PostKillSweepEnabled;
         _bot.Settings.PostKillSweepRetryWindowMs = Math.Max(800, PostKillSweepRetryWindowMs);
         _bot.Settings.PostKillSweepRetryIntervalMs = Math.Max(120, PostKillSweepRetryIntervalMs);
         _bot.Settings.PostKillSweepMaxAttempts = Math.Max(1, PostKillSweepMaxAttempts);
@@ -1756,7 +1858,26 @@ public sealed class MainViewModel : ObservableObject
             .Select(x => new AttackSkillSetting
             {
                 SkillId = x.SkillId,
-                CooldownMs = Math.Max(250, x.CooldownMs)
+                CooldownMs = Math.Max(250, x.CooldownMs),
+                Enabled = x.Enabled,
+                Priority = x.Priority,
+                MinMpPct = Math.Max(0, Math.Min(99, x.MinMpPct)),
+                MaxMpPct = Math.Max(0, Math.Min(99, x.MaxMpPct)),
+                TargetHpBelowPct = Math.Max(0, Math.Min(100, x.TargetHpBelowPct)),
+                TargetHpAbovePct = Math.Max(0, Math.Min(100, x.TargetHpAbovePct)),
+                SkipIfTargetHasAbnormalSkillId = Math.Max(0, x.SkipIfTargetHasAbnormalSkillId),
+                MaxCastRange = Math.Max(0, x.MaxCastRange)
+            })
+            .ToList();
+
+        _bot.Settings.RechargeRules = RechargeRuleRows
+            .Select(x => new RechargeRuleSetting
+            {
+                SkillId = x.SkillId,
+                MpBelowPct = Math.Max(1, Math.Min(99, x.MpBelowPct)),
+                CooldownMs = Math.Max(250, x.CooldownMs),
+                MinSelfMpPct = Math.Max(0, Math.Min(99, x.MinSelfMpPct)),
+                Enabled = x.Enabled
             })
             .ToList();
     }
@@ -1766,6 +1887,7 @@ public sealed class MainViewModel : ObservableObject
         if (_overlay is null)
         {
             _overlay = new OverlayWidgetWindow();
+            _overlay.BotToggleRequested += OnOverlayBotToggleRequested;
             _overlay.Closed += (_, _) => _overlay = null;
             _overlay.Show();
             _log.Info("Overlay widget opened.");
@@ -1773,6 +1895,22 @@ public sealed class MainViewModel : ObservableObject
         }
 
         _overlay.Close();
+    }
+
+    private void OnOverlayBotToggleRequested()
+    {
+        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_bot.IsRunning)
+            {
+                if (StopBotCommand.CanExecute(null))
+                    StopBot();
+                return;
+            }
+
+            if (StartBotCommand.CanExecute(null))
+                StartBot();
+        }));
     }
 
     private void CopyLogs()
@@ -1984,6 +2122,7 @@ public sealed class MainViewModel : ObservableObject
             _autoLoot = state.AutoLoot;
             _groupBuff = state.GroupBuff;
             _autoHeal = state.AutoHeal;
+            _autoRecharge = state.AutoRecharge;
 
             _selfHealSkillId = state.SelfHealSkillId;
             _groupHealSkillId = state.GroupHealSkillId;
@@ -2002,6 +2141,8 @@ public sealed class MainViewModel : ObservableObject
             _restEnabled = state.RestEnabled;
             _sitMpPct = Math.Max(1, Math.Min(95, state.SitMpPct));
             _standMpPct = Math.Max(_sitMpPct + 1, Math.Min(100, state.StandMpPct));
+            _restSitHpPct = Math.Max(0, Math.Min(99, state.RestSitHpPct));
+            _restStandHpPct = Math.Max(_restSitHpPct + 1, Math.Min(100, state.RestStandHpPct));
             _changeWaitTypeSitRaw = NormalizeChangeWaitTypeSitRaw(state.ChangeWaitTypeSitRaw);
             _huntCenterMode = state.HuntCenterMode;
             _anchorX = state.AnchorX;
@@ -2038,6 +2179,8 @@ public sealed class MainViewModel : ObservableObject
             _coordMode = state.CoordMode;
             _enableRoleCoordinator = state.EnableRoleCoordinator;
             _enableCombatFsmV2 = state.EnableCombatFsmV2;
+            _verboseCombatSkillLog = state.VerboseCombatSkillLog;
+            _selfCastLockDurationMs = state.SelfCastLockDurationMs > 0 ? state.SelfCastLockDurationMs : 900;
             _enableCasterV2 = state.EnableCasterV2;
             _enableSupportV2 = state.EnableSupportV2;
             _coordinatorChannel = string.IsNullOrWhiteSpace(state.CoordinatorChannel) ? "l2companion_combat_v2" : state.CoordinatorChannel;
@@ -2048,12 +2191,13 @@ public sealed class MainViewModel : ObservableObject
             _followerFallbackToStandalone = state.FollowerFallbackToStandalone;
             _supportAllowDamage = state.SupportAllowDamage;
 
-            EnforceRoleBasedSpoilPolicy(logChange: false);
 
             _spoilEnabled = state.SpoilEnabled;
             _spoilSkillId = state.SpoilSkillId;
             _spoilOncePerTarget = state.SpoilOncePerTarget;
             _spoilMaxAttemptsPerTarget = Math.Max(1, state.SpoilMaxAttemptsPerTarget);
+            _spoilRetryIntervalMs = state.SpoilRetryIntervalMs < 500 ? 1500 : state.SpoilRetryIntervalMs;
+            _spoilMaxCastDistance = state.SpoilMaxCastDistance < 80 ? 600 : state.SpoilMaxCastDistance;
             _sweepEnabled = state.SweepEnabled;
             _sweepSkillId = state.SweepSkillId;
             _sweepRetryWindowMs = Math.Max(500, state.SweepRetryWindowMs);
@@ -2194,11 +2338,39 @@ public sealed class MainViewModel : ObservableObject
                 {
                     SkillId = r.SkillId,
                     SkillName = _referenceData.ResolveSkillName(r.SkillId),
-                    CooldownMs = Math.Max(250, r.CooldownMs)
+                    CooldownMs = Math.Max(250, r.CooldownMs),
+                    Enabled = r.Enabled,
+                    Priority = r.Priority,
+                    MinMpPct = r.MinMpPct,
+                    MaxMpPct = r.MaxMpPct,
+                    TargetHpBelowPct = r.TargetHpBelowPct,
+                    TargetHpAbovePct = r.TargetHpAbovePct,
+                    SkipIfTargetHasAbnormalSkillId = r.SkipIfTargetHasAbnormalSkillId,
+                    MaxCastRange = r.MaxCastRange
                 });
             }
 
             ReindexAttackRules();
+
+            RechargeRuleRows.Clear();
+            foreach (var r in state.RechargeRules)
+            {
+                if (r.SkillId <= 0)
+                {
+                    continue;
+                }
+
+                RechargeRuleRows.Add(new RechargeRuleRow
+                {
+                    SkillId = r.SkillId,
+                    SkillName = _referenceData.ResolveSkillName(r.SkillId),
+                    MpBelowPct = Math.Max(1, Math.Min(99, r.MpBelowPct)),
+                    CooldownMs = Math.Max(250, r.CooldownMs),
+                    MinSelfMpPct = Math.Max(0, Math.Min(99, r.MinSelfMpPct)),
+                    Enabled = r.Enabled
+                });
+            }
+
             EnsureRuleNames();
         }
         finally
@@ -2217,6 +2389,7 @@ public sealed class MainViewModel : ObservableObject
         NotifyPropertyChanged(nameof(AutoLoot));
         NotifyPropertyChanged(nameof(GroupBuff));
         NotifyPropertyChanged(nameof(AutoHeal));
+        NotifyPropertyChanged(nameof(AutoRecharge));
         NotifyPropertyChanged(nameof(SelfHealSkillId));
         NotifyPropertyChanged(nameof(GroupHealSkillId));
         NotifyPropertyChanged(nameof(BuffSkillId));
@@ -2232,6 +2405,8 @@ public sealed class MainViewModel : ObservableObject
         NotifyPropertyChanged(nameof(RestEnabled));
         NotifyPropertyChanged(nameof(SitMpPct));
         NotifyPropertyChanged(nameof(StandMpPct));
+        NotifyPropertyChanged(nameof(RestSitHpPct));
+        NotifyPropertyChanged(nameof(RestStandHpPct));
         NotifyPropertyChanged(nameof(ChangeWaitTypeSitRaw));
         NotifyPropertyChanged(nameof(PartySupportEnabled));
         NotifyPropertyChanged(nameof(PartyHealHpThreshold));
@@ -2259,12 +2434,13 @@ public sealed class MainViewModel : ObservableObject
         NotifyPropertyChanged(nameof(CasterCastIntervalMs));
         NotifyPropertyChanged(nameof(Role));
         NotifyPropertyChanged(nameof(IsSpoilerRole));
-        NotifyPropertyChanged(nameof(SpoilControlsEnabled));
         NotifyPropertyChanged(nameof(CoordMode));
         NotifyPropertyChanged(nameof(EnableRoleCoordinator));
         NotifyPropertyChanged(nameof(AssistFollowEnabled));
         NotifyPropertyChanged(nameof(LeaderBroadcastEnabled));
         NotifyPropertyChanged(nameof(EnableCombatFsmV2));
+        NotifyPropertyChanged(nameof(VerboseCombatSkillLog));
+        NotifyPropertyChanged(nameof(SelfCastLockDurationMs));
         NotifyPropertyChanged(nameof(EnableCasterV2));
         NotifyPropertyChanged(nameof(EnableSupportV2));
         NotifyPropertyChanged(nameof(CoordinatorChannel));
@@ -2278,6 +2454,8 @@ public sealed class MainViewModel : ObservableObject
         NotifyPropertyChanged(nameof(SpoilSkillId));
         NotifyPropertyChanged(nameof(SpoilOncePerTarget));
         NotifyPropertyChanged(nameof(SpoilMaxAttemptsPerTarget));
+        NotifyPropertyChanged(nameof(SpoilRetryIntervalMs));
+        NotifyPropertyChanged(nameof(SpoilMaxCastDistance));
         NotifyPropertyChanged(nameof(SweepEnabled));
         NotifyPropertyChanged(nameof(SweepSkillId));
                 NotifyPropertyChanged(nameof(FinishCurrentTargetBeforeAggroRetarget));
@@ -2311,6 +2489,7 @@ public sealed class MainViewModel : ObservableObject
             AutoLoot = AutoLoot,
             GroupBuff = GroupBuff,
             AutoHeal = AutoHeal,
+            AutoRecharge = AutoRecharge,
             SelfHealSkillId = SelfHealSkillId,
             GroupHealSkillId = GroupHealSkillId,
             BuffSkillId = BuffSkillId,
@@ -2322,6 +2501,8 @@ public sealed class MainViewModel : ObservableObject
             RestEnabled = RestEnabled,
             SitMpPct = SitMpPct,
             StandMpPct = StandMpPct,
+            RestSitHpPct = RestSitHpPct,
+            RestStandHpPct = RestStandHpPct,
             ChangeWaitTypeSitRaw = ChangeWaitTypeSitRaw,
             HuntCenterMode = HuntCenterMode,
             AnchorX = AnchorX,
@@ -2353,6 +2534,8 @@ public sealed class MainViewModel : ObservableObject
             CoordMode = CoordMode,
             EnableRoleCoordinator = EnableRoleCoordinator,
             EnableCombatFsmV2 = EnableCombatFsmV2,
+            VerboseCombatSkillLog = VerboseCombatSkillLog,
+            SelfCastLockDurationMs = SelfCastLockDurationMs,
             EnableCasterV2 = EnableCasterV2,
             EnableSupportV2 = EnableSupportV2,
             CoordinatorChannel = CoordinatorChannel,
@@ -2366,6 +2549,8 @@ public sealed class MainViewModel : ObservableObject
             SpoilSkillId = SpoilSkillId,
             SpoilOncePerTarget = SpoilOncePerTarget,
             SpoilMaxAttemptsPerTarget = SpoilMaxAttemptsPerTarget,
+            SpoilRetryIntervalMs = SpoilRetryIntervalMs,
+            SpoilMaxCastDistance = SpoilMaxCastDistance,
             SweepEnabled = SweepEnabled,
             SweepSkillId = SweepSkillId,
             SweepRetryWindowMs = SweepRetryWindowMs,
@@ -2432,7 +2617,25 @@ public sealed class MainViewModel : ObservableObject
                 .Select(x => new AttackRuleState
                 {
                     SkillId = x.SkillId,
-                    CooldownMs = x.CooldownMs
+                    CooldownMs = x.CooldownMs,
+                    Enabled = x.Enabled,
+                    Priority = x.Priority,
+                    MinMpPct = x.MinMpPct,
+                    MaxMpPct = x.MaxMpPct,
+                    TargetHpBelowPct = x.TargetHpBelowPct,
+                    TargetHpAbovePct = x.TargetHpAbovePct,
+                    SkipIfTargetHasAbnormalSkillId = x.SkipIfTargetHasAbnormalSkillId,
+                    MaxCastRange = x.MaxCastRange
+                })
+                .ToList(),
+            RechargeRules = RechargeRuleRows
+                .Select(x => new RechargeRuleState
+                {
+                    SkillId = x.SkillId,
+                    MpBelowPct = x.MpBelowPct,
+                    CooldownMs = x.CooldownMs,
+                    MinSelfMpPct = x.MinSelfMpPct,
+                    Enabled = x.Enabled
                 })
                 .ToList()
         };
@@ -2653,11 +2856,44 @@ public sealed class AttackRuleRow : ObservableObject
     private int _skillId;
     private string _skillName = string.Empty;
     private int _cooldownMs = 1200;
+    private bool _enabled = true;
+    private int _priority;
+    private int _minMpPct;
+    private int _maxMpPct;
+    private int _targetHpBelowPct;
+    private int _targetHpAbovePct;
+    private int _skipIfTargetHasAbnormalSkillId;
+    private int _maxCastRange;
 
     public int Order { get => _order; set => SetProperty(ref _order, value); }
     public int SkillId { get => _skillId; set => SetProperty(ref _skillId, value); }
     public string SkillName { get => _skillName; set => SetProperty(ref _skillName, value); }
     public int CooldownMs { get => _cooldownMs; set => SetProperty(ref _cooldownMs, value); }
+    public bool Enabled { get => _enabled; set => SetProperty(ref _enabled, value); }
+    public int Priority { get => _priority; set => SetProperty(ref _priority, value); }
+    public int MinMpPct { get => _minMpPct; set => SetProperty(ref _minMpPct, value); }
+    public int MaxMpPct { get => _maxMpPct; set => SetProperty(ref _maxMpPct, value); }
+    public int TargetHpBelowPct { get => _targetHpBelowPct; set => SetProperty(ref _targetHpBelowPct, value); }
+    public int TargetHpAbovePct { get => _targetHpAbovePct; set => SetProperty(ref _targetHpAbovePct, value); }
+    public int SkipIfTargetHasAbnormalSkillId { get => _skipIfTargetHasAbnormalSkillId; set => SetProperty(ref _skipIfTargetHasAbnormalSkillId, value); }
+    public int MaxCastRange { get => _maxCastRange; set => SetProperty(ref _maxCastRange, value); }
+}
+
+public sealed class RechargeRuleRow : ObservableObject
+{
+    private int _skillId;
+    private string _skillName = string.Empty;
+    private int _mpBelowPct = 40;
+    private int _cooldownMs = 1200;
+    private int _minSelfMpPct = 20;
+    private bool _enabled = true;
+
+    public int SkillId { get => _skillId; set => SetProperty(ref _skillId, value); }
+    public string SkillName { get => _skillName; set => SetProperty(ref _skillName, value); }
+    public int MpBelowPct { get => _mpBelowPct; set => SetProperty(ref _mpBelowPct, value); }
+    public int CooldownMs { get => _cooldownMs; set => SetProperty(ref _cooldownMs, value); }
+    public int MinSelfMpPct { get => _minSelfMpPct; set => SetProperty(ref _minSelfMpPct, value); }
+    public bool Enabled { get => _enabled; set => SetProperty(ref _enabled, value); }
 }
 
 

@@ -6,7 +6,7 @@
         mc:Ignorable="d"
         Title="L2 Companion HUD"
         Width="280"
-        Height="330"
+        Height="364"
         WindowStyle="None"
         ResizeMode="NoResize"
         Topmost="True"
@@ -74,6 +74,18 @@
                                HorizontalAlignment="Right" Margin="0,3,0,0" />
                 </StackPanel>
             </Grid>
+
+            <Button x:Name="BotToggleButton"
+                    Content="Start Bot"
+                    Height="28"
+                    Margin="0,0,0,6"
+                    Foreground="#E6EDF3"
+                    Background="#2A4E66"
+                    BorderBrush="#7CC3FF"
+                    BorderThickness="1"
+                    FontFamily="Consolas"
+                    FontWeight="SemiBold"
+                    Click="OnBotToggleButtonClick" />
 
             <!-- Vitals -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,4">

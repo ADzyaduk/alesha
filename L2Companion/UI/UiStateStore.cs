@@ -1,4 +1,4 @@
-﻿using L2Companion.Bot;
+using L2Companion.Bot;
 using L2Companion.Proxy;
 using System.IO;
 using System.Text;
@@ -34,6 +34,8 @@ public sealed class UiAppState
     public bool RestEnabled { get; set; } = true;
     public int SitMpPct { get; set; } = 15;
     public int StandMpPct { get; set; } = 45;
+    public int RestSitHpPct { get; set; }
+    public int RestStandHpPct { get; set; }
     public int ChangeWaitTypeSitRaw { get; set; } = 0;
 
     public HuntCenterMode HuntCenterMode { get; set; } = HuntCenterMode.Player;
@@ -70,6 +72,8 @@ public sealed class UiAppState
     public CoordMode CoordMode { get; set; } = CoordMode.Standalone;
     public bool EnableRoleCoordinator { get; set; }
     public bool EnableCombatFsmV2 { get; set; } = true;
+    public bool VerboseCombatSkillLog { get; set; }
+    public int SelfCastLockDurationMs { get; set; } = 900;
     public bool EnableCasterV2 { get; set; } = true;
     public bool EnableSupportV2 { get; set; } = true;
     public string CoordinatorChannel { get; set; } = "l2companion_combat_v2";
@@ -86,7 +90,9 @@ public sealed class UiAppState
     public bool SpoilEnabled { get; set; }
     public int SpoilSkillId { get; set; }
     public bool SpoilOncePerTarget { get; set; } = true;
-    public int SpoilMaxAttemptsPerTarget { get; set; } = 2;
+    public int SpoilMaxAttemptsPerTarget { get; set; } = 12;
+    public int SpoilRetryIntervalMs { get; set; } = 1500;
+    public int SpoilMaxCastDistance { get; set; } = 600;
     public bool SweepEnabled { get; set; } = true;
     public int SweepSkillId { get; set; } = 42;
     public int SweepRetryWindowMs { get; set; } = 3000;
@@ -141,6 +147,7 @@ public sealed class CharacterBotState
     public bool AutoLoot { get; set; }
     public bool GroupBuff { get; set; }
     public bool AutoHeal { get; set; }
+    public bool AutoRecharge { get; set; }
 
     public int SelfHealSkillId { get; set; }
     public int GroupHealSkillId { get; set; }
@@ -154,6 +161,8 @@ public sealed class CharacterBotState
     public bool RestEnabled { get; set; } = true;
     public int SitMpPct { get; set; } = 15;
     public int StandMpPct { get; set; } = 45;
+    public int RestSitHpPct { get; set; }
+    public int RestStandHpPct { get; set; }
     public int ChangeWaitTypeSitRaw { get; set; } = 0;
 
     public HuntCenterMode HuntCenterMode { get; set; } = HuntCenterMode.Player;
@@ -190,6 +199,8 @@ public sealed class CharacterBotState
     public CoordMode CoordMode { get; set; } = CoordMode.Standalone;
     public bool EnableRoleCoordinator { get; set; }
     public bool EnableCombatFsmV2 { get; set; } = true;
+    public bool VerboseCombatSkillLog { get; set; }
+    public int SelfCastLockDurationMs { get; set; } = 900;
     public bool EnableCasterV2 { get; set; } = true;
     public bool EnableSupportV2 { get; set; } = true;
     public string CoordinatorChannel { get; set; } = "l2companion_combat_v2";
@@ -206,7 +217,9 @@ public sealed class CharacterBotState
     public bool SpoilEnabled { get; set; }
     public int SpoilSkillId { get; set; }
     public bool SpoilOncePerTarget { get; set; } = true;
-    public int SpoilMaxAttemptsPerTarget { get; set; } = 2;
+    public int SpoilMaxAttemptsPerTarget { get; set; } = 12;
+    public int SpoilRetryIntervalMs { get; set; } = 1500;
+    public int SpoilMaxCastDistance { get; set; } = 600;
     public bool SweepEnabled { get; set; } = true;
     public int SweepSkillId { get; set; } = 42;
     public int SweepRetryWindowMs { get; set; } = 3000;
@@ -237,6 +250,7 @@ public sealed class CharacterBotState
     public List<BuffRuleState> BuffRules { get; set; } = [];
     public List<PartyHealRuleState> PartyHealRules { get; set; } = [];
     public List<AttackRuleState> AttackSkills { get; set; } = [];
+    public List<RechargeRuleState> RechargeRules { get; set; } = [];
 }
 
 public sealed class HealRuleState
@@ -253,6 +267,14 @@ public sealed class AttackRuleState
 {
     public int SkillId { get; set; }
     public int CooldownMs { get; set; } = 1200;
+    public bool Enabled { get; set; } = true;
+    public int Priority { get; set; }
+    public int MinMpPct { get; set; }
+    public int MaxMpPct { get; set; }
+    public int TargetHpBelowPct { get; set; }
+    public int TargetHpAbovePct { get; set; }
+    public int SkipIfTargetHasAbnormalSkillId { get; set; }
+    public int MaxCastRange { get; set; }
 }
 
 public sealed class BuffRuleState
@@ -274,6 +296,15 @@ public sealed class PartyHealRuleState
     public int MinMpPct { get; set; }
     public int CooldownMs { get; set; } = 1200;
     public bool InFight { get; set; } = true;
+    public bool Enabled { get; set; } = true;
+}
+
+public sealed class RechargeRuleState
+{
+    public int SkillId { get; set; }
+    public int MpBelowPct { get; set; } = 40;
+    public int CooldownMs { get; set; } = 1200;
+    public int MinSelfMpPct { get; set; } = 20;
     public bool Enabled { get; set; } = true;
 }
 
@@ -440,6 +471,8 @@ public sealed class UiStateStore
             RestEnabled = legacy.RestEnabled,
             SitMpPct = legacy.SitMpPct,
             StandMpPct = legacy.StandMpPct,
+            RestSitHpPct = legacy.RestSitHpPct,
+            RestStandHpPct = legacy.RestStandHpPct,
             ChangeWaitTypeSitRaw = legacy.ChangeWaitTypeSitRaw,
             HuntCenterMode = legacy.HuntCenterMode,
             AnchorX = legacy.AnchorX,
@@ -471,6 +504,8 @@ public sealed class UiStateStore
             CoordMode = legacy.CoordMode,
             EnableRoleCoordinator = legacy.EnableRoleCoordinator,
             EnableCombatFsmV2 = legacy.EnableCombatFsmV2,
+            VerboseCombatSkillLog = legacy.VerboseCombatSkillLog,
+            SelfCastLockDurationMs = legacy.SelfCastLockDurationMs > 0 ? legacy.SelfCastLockDurationMs : 900,
             EnableCasterV2 = legacy.EnableCasterV2,
             EnableSupportV2 = legacy.EnableSupportV2,
             CoordinatorChannel = legacy.CoordinatorChannel,
@@ -487,6 +522,8 @@ public sealed class UiStateStore
             SpoilSkillId = legacy.SpoilSkillId,
             SpoilOncePerTarget = legacy.SpoilOncePerTarget,
             SpoilMaxAttemptsPerTarget = legacy.SpoilMaxAttemptsPerTarget,
+            SpoilRetryIntervalMs = legacy.SpoilRetryIntervalMs >= 500 ? legacy.SpoilRetryIntervalMs : 1500,
+            SpoilMaxCastDistance = legacy.SpoilMaxCastDistance >= 80 ? legacy.SpoilMaxCastDistance : 600,
             SweepEnabled = legacy.SweepEnabled,
             SweepSkillId = legacy.SweepSkillId,
             SweepRetryWindowMs = legacy.SweepRetryWindowMs,

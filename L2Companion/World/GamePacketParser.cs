@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using L2Companion.Core;
 using L2Companion.Protocol;
 
@@ -18,8 +18,9 @@ public sealed class GamePacketParser
     private const int InventoryUpdateRowTail = 22;
     private const int AdenaItemId = 57;
     private const double KillCreditWindowSec = 18.0;
-    private const int SysMsgSpoilSuccess = 612;
-    private const int SysMsgAlreadySpoiled = 357;
+    // 612 = "The Spoil condition has been activated." (success — no further Spoil needed on this mob).
+    // 357 = already spoiled / cannot spoil again (treat as done for sweep logic).
+    private static readonly HashSet<int> SpoilDoneSystemMessageIds = [612, 357];
     private static readonly HashSet<int> SpoilAbnormalSkillIds = [254, 302];
 
     public GamePacketParser(GameWorldState world, LogService log)
@@ -800,7 +801,7 @@ public sealed class GamePacketParser
         try
         {
             var msgId = BitConverter.ToInt32(payload.Slice(0, 4));
-            if (msgId is not (SysMsgSpoilSuccess or SysMsgAlreadySpoiled))
+            if (!SpoilDoneSystemMessageIds.Contains(msgId))
             {
                 return;
             }
@@ -916,14 +917,28 @@ public sealed class GamePacketParser
             var meId = _world.Me.ObjectId;
             if (casterId == meId)
             {
-                var targetId = _world.Me.TargetId;
-                if (targetId != 0 && _world.Npcs.TryGetValue(targetId, out var targetNpc))
+                _world.WithLock(() =>
                 {
-                    targetNpc.LastHitByMeAtUtc = now;
-                    targetNpc.KillCredited = false;
-                    _world.Npcs[targetId] = targetNpc;
-                    _world.MarkMutation(WorldMutationType.Npc);
-                }
+                    // Interlude-style: casterId, targetId, skillId, level, hitTime...
+                    if (ints.Count >= 2)
+                    {
+                        var skillLaunchedId = ints[1];
+                        if (skillLaunchedId > 0 && skillLaunchedId <= 200_000)
+                        {
+                            var lockMs = Math.Max(120, _world.SelfCastLockDurationMs);
+                            _world.Me.CastingUntilUtc = now.AddMilliseconds(lockMs);
+                        }
+                    }
+
+                    var targetId = _world.Me.TargetId;
+                    if (targetId != 0 && _world.Npcs.TryGetValue(targetId, out var targetNpc))
+                    {
+                        targetNpc.LastHitByMeAtUtc = now;
+                        targetNpc.KillCredited = false;
+                        _world.Npcs[targetId] = targetNpc;
+                        _world.MarkMutation(WorldMutationType.Npc);
+                    }
+                });
 
                 return;
             }
@@ -1033,24 +1048,16 @@ public sealed class GamePacketParser
     {
         var now = DateTime.UtcNow;
         var targetId = _world.Me.TargetId;
+        // Trust server sysmsg on current target — do not require our inject flags or abnormal parse (some builds omit those).
         if (targetId != 0 && _world.Npcs.TryGetValue(targetId, out var targetNpc))
         {
-            var targetRecentlySpoiled = targetNpc.SpoilAttempted
-                && targetNpc.SpoilAtUtc != DateTime.MinValue
-                && (now - targetNpc.SpoilAtUtc).TotalSeconds <= 8;
-            var targetHasSpoilAbnormal = targetNpc.AbnormalEffectSkillIds.Count > 0
-                && targetNpc.AbnormalEffectSkillIds.Overlaps(SpoilAbnormalSkillIds);
-
-            if (targetRecentlySpoiled || targetHasSpoilAbnormal)
-            {
-                targetNpc.SpoilSucceeded = true;
-                targetNpc.SpoilAttempted = true;
-                targetNpc.SpoilAtUtc = now;
-                _world.Npcs[targetId] = targetNpc;
-                _world.MarkMutation(WorldMutationType.Npc);
-                _log.Info($"[Spoil] success via SystemMessage id={msgId} target=0x{targetId:X}");
-                return;
-            }
+            targetNpc.SpoilSucceeded = true;
+            targetNpc.SpoilAttempted = true;
+            targetNpc.SpoilAtUtc = now;
+            _world.Npcs[targetId] = targetNpc;
+            _world.MarkMutation(WorldMutationType.Npc);
+            _log.Info($"[Spoil] done via SystemMessage id={msgId} target=0x{targetId:X}");
+            return;
         }
 
         var me = _world.Me;
@@ -1255,20 +1262,30 @@ public sealed class GamePacketParser
         npc.IsDead = true;
         npc.HpPct = 0;
 
+        var killCreditedNow = false;
         if (!npc.KillCredited && npc.LastHitByMeAtUtc != DateTime.MinValue && (DateTime.UtcNow - npc.LastHitByMeAtUtc).TotalSeconds <= KillCreditWindowSec)
         {
             npc.KillCredited = true;
+            killCreditedNow = true;
             _world.WithLock(() => _world.SessionStats.AddKill());
         }
 
-        if (!npc.SpoilSucceeded && npc.SpoilAttempted && npc.SpoilAtUtc != DateTime.MinValue && (DateTime.UtcNow - npc.SpoilAtUtc).TotalSeconds <= 10)
+        // Do not infer SpoilSucceeded from "recent SpoilAttempted" on death — the bot now sets SpoilAttempted on every
+        // inject, which would false-positive failed spoils. Rely on SystemMessage + abnormal, or abnormal alone here.
+        if (!npc.SpoilSucceeded && npc.AbnormalEffectSkillIds.Count > 0
+            && npc.AbnormalEffectSkillIds.Overlaps(SpoilAbnormalSkillIds))
         {
             npc.SpoilSucceeded = true;
-            _log.Info($"[Spoil] success via recent-attempt fallback target=0x{objectId:X}");
+            npc.SpoilAttempted = true;
+            _log.Info($"[Spoil] success via spoil-abnormal on death target=0x{objectId:X}");
         }
 
         _world.Npcs[objectId] = npc;
         _world.MarkMutation(WorldMutationType.Npc);
+
+        // Loot anchor: drops arrive as SpawnItem around corpse XY — not a single "drop count" in Die on most chronicles.
+        if (killCreditedNow || objectId == _world.Me.TargetId)
+            _world.SetLootCorpseAnchor(npc.X, npc.Y, npc.Z, DateTime.UtcNow);
     }
 
     private void ParseSkillList(ReadOnlySpan<byte> payload)
@@ -1679,6 +1696,19 @@ public sealed class GamePacketParser
 
                 _world.Me.AbnormalUpdatedAtUtc = now;
                 updatedMe = true;
+                return;
+            }
+
+            if (_world.Party.TryGetValue(objectId, out var partyMember))
+            {
+                if (explicitEmpty)
+                    partyMember.AbnormalEffectSkillIds.Clear();
+                else if (effects.Count > 0)
+                    partyMember.AbnormalEffectSkillIds = effects;
+
+                partyMember.AbnormalUpdatedAtUtc = now;
+                _world.Party[objectId] = partyMember;
+                _world.MarkMutation(WorldMutationType.Party);
                 return;
             }
 

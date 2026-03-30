@@ -1,4 +1,4 @@
-﻿namespace L2Companion.World;
+namespace L2Companion.World;
 
 public sealed class CharacterState
 {
@@ -19,6 +19,8 @@ public sealed class CharacterState
     public int MaxCp { get; set; }
     public int TargetId { get; set; }
     public bool IsSitting { get; set; }
+    /// <summary>While UTC now is before this, bot should avoid overlapping combat skill/attack sends (set from MagicSkillLaunched).</summary>
+    public DateTime CastingUntilUtc { get; set; } = DateTime.MinValue;
     public string Name { get; set; } = string.Empty;
     public HashSet<int> AbnormalEffectSkillIds { get; set; } = [];
     public DateTime AbnormalUpdatedAtUtc { get; set; } = DateTime.MinValue;
@@ -49,6 +51,7 @@ public sealed class CharacterState
             MaxCp = MaxCp,
             TargetId = TargetId,
             IsSitting = IsSitting,
+            CastingUntilUtc = CastingUntilUtc,
             Name = Name,
             AbnormalEffectSkillIds = AbnormalEffectSkillIds.ToArray(),
             AbnormalUpdatedAtUtc = AbnormalUpdatedAtUtc
@@ -156,6 +159,8 @@ public sealed class PartyMemberState
     public int MaxMp { get; set; }
     public int CurCp { get; set; }
     public int MaxCp { get; set; }
+    public HashSet<int> AbnormalEffectSkillIds { get; set; } = [];
+    public DateTime AbnormalUpdatedAtUtc { get; set; } = DateTime.MinValue;
 
     public float HpPct => MaxHp > 0 ? CurHp * 100f / MaxHp : 0;
     public float MpPct => MaxMp > 0 ? CurMp * 100f / MaxMp : 0;
@@ -173,7 +178,9 @@ public sealed class PartyMemberState
             CurMp = CurMp,
             MaxMp = MaxMp,
             CurCp = CurCp,
-            MaxCp = MaxCp
+            MaxCp = MaxCp,
+            AbnormalEffectSkillIds = AbnormalEffectSkillIds.ToArray(),
+            AbnormalUpdatedAtUtc = AbnormalUpdatedAtUtc
         };
 }
 
@@ -209,8 +216,20 @@ public sealed class SessionStatsState
 
     public void SetAdenaSnapshot(long current)
     {
-        CurrentAdena = Math.Max(0, current);
-        _hasAdenaBaseline = true;
+        current = Math.Max(0, current);
+        if (!_hasAdenaBaseline)
+        {
+            CurrentAdena = current;
+            _hasAdenaBaseline = true;
+            return;
+        }
+
+        if (current > CurrentAdena)
+        {
+            AdenaGained += current - CurrentAdena;
+        }
+
+        CurrentAdena = current;
     }
 
     public void ApplyAdenaUpdate(long current)
@@ -261,6 +280,7 @@ public sealed class CharacterSnapshot
     public int MaxCp { get; init; }
     public int TargetId { get; init; }
     public bool IsSitting { get; init; }
+    public DateTime CastingUntilUtc { get; init; } = DateTime.MinValue;
     public string Name { get; init; } = string.Empty;
     public IReadOnlyList<int> AbnormalEffectSkillIds { get; init; } = [];
     public DateTime AbnormalUpdatedAtUtc { get; init; }
@@ -335,8 +355,11 @@ public sealed class PartyMemberSnapshot
     public int MaxMp { get; init; }
     public int CurCp { get; init; }
     public int MaxCp { get; init; }
+    public IReadOnlyList<int> AbnormalEffectSkillIds { get; init; } = [];
+    public DateTime AbnormalUpdatedAtUtc { get; init; }
 
     public float HpPct => MaxHp > 0 ? CurHp * 100f / MaxHp : 0;
+    public float MpPct => MaxMp > 0 ? CurMp * 100f / MaxMp : 0;
 }
 
 public sealed class SessionStatsSnapshot

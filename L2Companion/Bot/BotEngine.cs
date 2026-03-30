@@ -1,3 +1,5 @@
+using L2Companion.Bot.Roles;
+using L2Companion.Bot.Services;
 using L2Companion.Core;
 using L2Companion.Protocol;
 using L2Companion.Proxy;
@@ -21,104 +23,37 @@ public sealed class BotEngine
     private CancellationTokenSource? _cts;
     private Task? _loopTask;
 
-    private DateTime _nextBuffAt = DateTime.MinValue;
-    private DateTime _nextSelfHealAt = DateTime.MinValue;
-    private DateTime _nextGroupHealAt = DateTime.MinValue;
-    private DateTime _nextPartyHealAt = DateTime.MinValue;
-    private DateTime _nextFightActionAt = DateTime.MinValue;
-    private DateTime _nextLootAt = DateTime.MinValue;
-    private DateTime _nextMoveAt = DateTime.MinValue;
-    private DateTime _nextRestToggleAt = DateTime.MinValue;
-    private DateTime _restExpectedStateUntilUtc = DateTime.MinValue;
-    private bool? _restExpectedIsSitting;
-    private DateTime _nextForceAttackAt = DateTime.MinValue;
-    private DateTime _nextTargetActionAt = DateTime.MinValue;
-    private DateTime _nextCompatAttackRequestAt = DateTime.MinValue;
-    private DateTime _preferAttackRequestUntilUtc = DateTime.MinValue;
-    private DateTime _nextTransportSwitchAtUtc = DateTime.MinValue;
-    private DateTime _nextSpoilAt = DateTime.MinValue;
-    private DateTime _nextSweepAt = DateTime.MinValue;
-    private DateTime _nextEmergencyRetaliateAt = DateTime.MinValue;
-
-    private readonly Dictionary<int, DateTime> _nextSkillById = [];
-    private readonly Dictionary<string, DateTime> _nextPartyHealRuleAt = [];
-    private readonly Dictionary<string, DateTime> _nextBuffRuleAt = [];
-    private int _lastAutoTargetObjectId;
-    private string _lastDecision = "idle";
-    private DateTime _lastDecisionAtUtc = DateTime.UtcNow;
-    private BotCommandResult _lastCommand = BotCommandResult.Deferred("init", "not-started");
-    private DateTime _nextCommandDiagLogAt = DateTime.MinValue;
-    private DateTime _nextSentCommandDiagLogAt = DateTime.MinValue;
-    private DateTime _nextPhaseDiagLogAt = DateTime.MinValue;
-
     private BotRuntimeState _runtimeState = BotRuntimeState.Stopped;
     private string _runtimeReason = "stopped";
     private DateTime _lastRuntimeTransitionAtUtc = DateTime.UtcNow;
 
-    private int _combatTargetObjectId;
-    private float _combatTargetLastHpPct = -1f;
-    private DateTime _combatTargetAssignedAtUtc = DateTime.MinValue;
-    private DateTime _combatLastProgressAtUtc = DateTime.MinValue;
     private string _combatPhase = "idle";
+    private DateTime _nextPhaseDiagLogAt = DateTime.MinValue;
+    private bool _criticalHoldActive;
     private int _lastObservedSelfHp = -1;
     private DateTime _lastIncomingDamageAtUtc = DateTime.MinValue;
-    private int _assumedTargetObjectId;
-    private DateTime _assumedTargetUntilUtc = DateTime.MinValue;
-    private int _spoilPendingTargetObjectId;
-    private DateTime _spoilPendingUntilUtc = DateTime.MinValue;
 
-    private DateTime _combatTargetLastSeenAtUtc = DateTime.MinValue;
-    private int _combatTargetLastX;
-    private int _combatTargetLastY;
-    private int _combatTargetLastZ;
-    private int _combatTargetNpcTypeId;
-    private bool _combatTargetSpoilSucceeded;
-    private DateTime _combatTargetLastHitByMeAtUtc = DateTime.MinValue;
-    private bool _combatTargetHadCombatSignal;
+    private int _lastCombatTargetOid;
 
-    private bool _postKillActive;
-    private int _postKillTargetObjectId;
-    private int _postKillNpcTypeId;
-    private int _postKillX;
-    private int _postKillY;
-    private int _postKillZ;
-    private bool _postKillSpoilSucceeded;
-    private DateTime _postKillStartedAtUtc = DateTime.MinValue;
-    private DateTime _postKillSweepUntilUtc = DateTime.MinValue;
-    private DateTime _postKillSpawnWaitUntilUtc = DateTime.MinValue;
-    private DateTime _postKillMinWaitForLootUntilUtc = DateTime.MinValue;
-    private DateTime _nextPostKillActionAt = DateTime.MinValue;
-    private int _postKillLootActions;
-    private int _postKillEmptyPolls;
-    private int _postKillItemsSeen;
-    private int _postKillItemsPicked;
-    private int _postKillItemsSkipped;
-    private bool _postKillTargetCanceled;
-    private int _postKillSweepAttempts;
-    private int _postKillMoveToCorpseAttempts;
-    private bool _postKillReachedCorpseZone;
-    private readonly HashSet<int> _postKillSeenItemIds = [];
-    private readonly Dictionary<int, int> _postKillLootItemAttempts = [];
-    private readonly Dictionary<int, DateTime> _spoilAttemptLocalByTarget = [];
-    private readonly Dictionary<int, int> _spoilAttemptCountByTarget = [];
     private readonly CombatCoordinator _coordinator;
     private DateTime _nextCoordinatorFollowAt = DateTime.MinValue;
     private long _coordinatorSequence;
-    private readonly Dictionary<int, DateTime> _recentPostKillByTarget = [];
-    private readonly Dictionary<int, DateTime> _temporarilyIgnoredTargets = [];
-    private int _combatNoProgressStrikes;
-    private int _killTimeoutFireCount;
-    private DateTime _casterChaseStartedAtUtc = DateTime.MinValue;
-    private int _casterStuckStrikes;
-    private readonly Dictionary<int, int> _stallRetargetCountByTarget = [];
-    private DateTime _combatNoServerTargetSinceUtc = DateTime.MinValue;
-    private int _targetConfirmRecoveryStage;
-    private DateTime _targetConfirmRecoveryStartedAtUtc = DateTime.MinValue;
-    private DateTime _nextAutoFightDisabledLogAt = DateTime.MinValue;
-    private bool _criticalHoldActive;
-    private DateTime _nextIdleNoTargetLogAt = DateTime.MinValue;
-    private bool _deadStopActive;
-    private const double AggroRecentWindowSec = 18.0;
+
+    private readonly CombatService _combat;
+    private readonly TargetingService _targeting;
+    private readonly HealService _heal;
+    private readonly BuffService _buff;
+    private readonly RechargeService _recharge;
+    private readonly LootService _loot;
+    private readonly PostKillService _postKill;
+    private readonly RestService _rest;
+
+    private IBotRole _activeRole;
+    private readonly MeleeDdRole _meleeDdRole;
+    private readonly CasterDdRole _casterDdRole;
+    private readonly SpoilerRole _spoilerRole;
+    private readonly HealerRole _healerRole;
+    private readonly BufferRole _bufferRole;
 
     public BotEngine(ProxyService proxy, GameWorldState world, LogService log)
     {
@@ -126,6 +61,23 @@ public sealed class BotEngine
         _world = world;
         _log = log;
         _coordinator = new CombatCoordinator(log);
+
+        _combat = new CombatService();
+        _targeting = new TargetingService();
+        _heal = new HealService(_combat);
+        _buff = new BuffService(_combat);
+        _recharge = new RechargeService(_combat);
+        _loot = new LootService(_combat);
+        _postKill = new PostKillService(_combat);
+        _rest = new RestService(_combat);
+
+        _meleeDdRole = new MeleeDdRole(_combat, _targeting, _postKill);
+        _casterDdRole = new CasterDdRole(_combat, _targeting, _postKill);
+        _spoilerRole = new SpoilerRole(_combat, _targeting, _postKill);
+        _healerRole = new HealerRole(_combat, _heal, _buff, _recharge);
+        _bufferRole = new BufferRole(_combat, _buff, _heal, _recharge);
+
+        _activeRole = _meleeDdRole;
     }
 
     public bool IsRunning => _runtimeState != BotRuntimeState.Stopped;
@@ -134,13 +86,12 @@ public sealed class BotEngine
 
     public string GetDecisionSummary()
     {
-        var age = (DateTime.UtcNow - _lastDecisionAtUtc).TotalSeconds;
-
+        var age = (DateTime.UtcNow - _combat.LastDecisionAtUtc).TotalSeconds;
         var d = _proxy.Diagnostics;
-        return $"{_lastDecision}  ({age:0.0}s)  Phase:{_combatPhase}  Cmd:{_lastCommand.Status}/{_lastCommand.Action}  Inject:{d.InjectPackets} Pending:{d.PendingInjectPackets} Target:0x{_world.Me.TargetId:X}";
+        return $"{_combat.LastDecision}  ({age:0.0}s)  Phase:{_combatPhase}  Cmd:{_combat.LastCommand.Status}/{_combat.LastCommand.Action}  Inject:{d.InjectPackets} Pending:{d.PendingInjectPackets} Target:0x{_world.Me.TargetId:X}";
     }
 
-    public string GetLastCommandTrace() => _lastCommand.ToString();
+    public string GetLastCommandTrace() => _combat.LastCommand.ToString();
 
     public string GetRuntimeSummary()
     {
@@ -151,80 +102,51 @@ public sealed class BotEngine
 
     public string GetCombatSummary()
     {
-        var progressAge = _combatLastProgressAtUtc == DateTime.MinValue
-            ? -1
-            : (DateTime.UtcNow - _combatLastProgressAtUtc).TotalSeconds;
-
-        var assignedAge = _combatTargetAssignedAtUtc == DateTime.MinValue
-            ? -1
-            : (DateTime.UtcNow - _combatTargetAssignedAtUtc).TotalSeconds;
-
-        return $"phase={_combatPhase} target=0x{_combatTargetObjectId:X} assigned={assignedAge:0.0}s progress={progressAge:0.0}s";
+        return $"phase={_combatPhase} role={_activeRole.RoleType} target=0x{_lastCombatTargetOid:X}";
     }
 
     public void Start()
     {
         if (_cts is not null)
-        {
             return;
-        }
 
         _cts = new CancellationTokenSource();
-        ClearSpoilPendingTarget();
-        ResetPostKillState();
-        ResetCombatState();
+        SyncActiveRole();
+        ResetAllServices();
         EnsureCoordinatorMode();
-        TransitionRuntime(IsProxyReady() ? BotRuntimeState.Running : BotRuntimeState.PausedNoSession, IsProxyReady() ? "start-ready" : "start-no-session", logTransition: false);
+        TransitionRuntime(IsProxyReady() ? BotRuntimeState.Running : BotRuntimeState.PausedNoSession,
+            IsProxyReady() ? "start-ready" : "start-no-session", logTransition: false);
         _loopTask = Task.Run(() => LoopAsync(_cts.Token), _cts.Token);
         _log.Info("Bot engine started.");
-        _log.Info($"[AutoFight] config AutoFight={Settings.AutoFight} Role={Settings.Role} Mode={Settings.BattleMode} Coord={Settings.CoordMode} Spoil={Settings.SpoilEnabled} Sweep={Settings.SweepEnabled}");
+        _log.Info($"[AutoFight] config AutoFight={Settings.AutoFight} Role={Settings.Role} Mode={Settings.BattleMode} Coord={Settings.CoordMode} Spoil={Settings.SpoilEnabled} SpoilSkillId={Settings.SpoilSkillId} Sweep={Settings.SweepEnabled} SweepSkillId={Settings.SweepSkillId}");
     }
+
     public void Stop()
     {
         if (_cts is null)
-        {
             return;
-        }
 
         var cts = _cts;
         var loopTask = _loopTask;
         _cts = null;
         _loopTask = null;
 
-        try
-        {
-            cts.Cancel();
-        }
-        catch
-        {
-            // ignored
-        }
-
-        try
-        {
-            loopTask?.Wait(600);
-        }
-        catch
-        {
-            // loop is cancellation-driven; no error for Stop path
-        }
+        try { cts.Cancel(); } catch { }
+        try { loopTask?.Wait(600); } catch { }
 
         cts.Dispose();
-        _lastAutoTargetObjectId = 0;
-        ClearSpoilPendingTarget();
-        ResetPostKillState();
-        ResetCombatState();
-        try
-        {
-            _coordinator.Configure(false, CoordMode.Standalone, Settings.CoordinatorChannel);
-        }
-        catch
-        {
-            // ignored
-        }
+        ResetAllServices();
+
+        try { _coordinator.Configure(false, CoordMode.Standalone, Settings.CoordinatorChannel); } catch { }
+
         TransitionRuntime(BotRuntimeState.Stopped, "manual-stop", logTransition: false);
         _log.Info("Bot engine stopped.");
     }
+
+    // ------------------------------------------------------------------ //
+    // Main loop
+    // ------------------------------------------------------------------ //
+
     private async Task LoopAsync(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -235,2806 +157,901 @@ public sealed class BotEngine
                 if (_runtimeState != BotRuntimeState.Running)
                 {
                     SetCombatPhase("paused-no-session");
-                    SetDecision("paused-no-session");
+                    _combat.SetDecision("paused-no-session");
                     await Task.Delay(220, ct);
                     continue;
                 }
 
-                var hasWorldContext = _world.EnteredWorld
-                    || _world.Me.ObjectId != 0
-                    || !_world.Npcs.IsEmpty
-                    || !_world.Items.IsEmpty;
-
-                if (hasWorldContext)
+                if (!HasWorldContext())
                 {
-                    if (TickDeadStop())
-                    {
-                        await Task.Delay(220, ct);
-                        continue;
-                    }
-
-                    var selfHealTriggered = TickAutoHeal();
-                    TickPartyHeal();
-
-                    if (selfHealTriggered)
-                    {
-                        await Task.Delay(120, ct);
-                        continue;
-                    }
-
-                    if (TickMpRest())
-                    {
-                        await Task.Delay(140, ct);
-                        continue;
-                    }
-
-                    TickAutoBuff();
-                    TickAutoFight();
-                    TickAutoLoot();
+                    await Task.Delay(220, ct);
+                    continue;
                 }
+
+                SyncActiveRole();
+                var ctx = BuildContext();
+                var me = ctx.World.Me;
+
+                if (me.CurHp <= 0 && me.ObjectId != 0)
+                {
+                    SetCombatPhase("dead-wait-res");
+                    _combat.SetDecision("dead-wait-res");
+                    _lastCombatTargetOid = 0;
+                    await Task.Delay(2000, ct);
+                    continue;
+                }
+
+                TrackIncomingDamage(ctx);
+
+                if (_heal.TickSelfHeal(ctx, inFight: _combatPhase == "in_kill_loop"))
+                {
+                    await Task.Delay(120, ct);
+                    continue;
+                }
+
+                _heal.TickPartyHeal(ctx, inFight: _combatPhase == "in_kill_loop", criticalHoldActive: _criticalHoldActive);
+                _recharge.Tick(ctx, criticalHoldActive: _criticalHoldActive);
+                _buff.Tick(ctx, inFight: _combatPhase == "in_kill_loop", criticalHoldActive: _criticalHoldActive,
+                    postKillActive: false, combatPhase: _combatPhase);
+
+                TickCoordinatorFollower(ctx);
+
+                if (_criticalHoldActive && !CombatService.IsSupportRole(Settings))
+                {
+                    SetCombatPhase("critical-hold");
+                    _combat.SetDecision($"critical-hold hp={me.HpPct:0.#}%");
+                    _rest.Tick(BuildContext(), inCombatFlow: false);
+                    await Task.Delay(200, ct);
+                    continue;
+                }
+
+                if (CombatService.IsSupportRole(Settings))
+                {
+                    var result = _activeRole.Tick(ctx);
+                    UpdateCombatPhaseFromRole(result);
+                    TickCoordinatorLeader(ctx);
+                    await Task.Delay(180, ct);
+                    continue;
+                }
+
+                if (!Settings.AutoFight)
+                {
+                    _rest.Tick(ctx, inCombatFlow: false);
+                    _loot.Tick(ctx, inCombat: false, postKillActive: false, hasRecentDamage: false);
+                    SetCombatPhase("idle");
+                    await Task.Delay(200, ct);
+                    continue;
+                }
+
+                await RunCombatCycleAsync(ct);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                break;
-            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception ex)
             {
-                _log.Info($"Bot tick error: {ex.Message}");
+                _log.Info($"Bot loop error: {ex.Message}");
+                try { await Task.Delay(1000, ct); } catch { break; }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    // Sequential combat (ported from Python _auto_combat_loop)
+    // ------------------------------------------------------------------ //
+
+    private async Task RunCombatCycleAsync(CancellationToken ct)
+    {
+        // Loot any nearby items (from previous kills)
+        if (Settings.AutoLoot)
+            await LootNearbyAsync(ct);
+        if (ct.IsCancellationRequested) return;
+
+        await AwaitRestMpIfNeededAsync(ct);
+        if (ct.IsCancellationRequested) return;
+
+        _targeting.EnsureHuntCenterAnchor(BuildContext());
+        var ctx = BuildContext();
+        var me = ctx.World.Me;
+        var (cx, cy, cz) = _targeting.GetHuntCenter(ctx);
+        var mob = _targeting.SelectFightTarget(ctx, me, cx, cy, cz, lastAutoTargetObjectId: _lastCombatTargetOid);
+
+        if (mob is null)
+        {
+            _lastCombatTargetOid = 0;
+            SetCombatPhase("idle");
+            _combat.SetDecision("no-mobs-in-range");
+
+            if (Settings.AutoLoot)
+                await LootNearbyAsync(ct);
+
+            await AwaitRestMpIfNeededAsync(ct);
+
+            if (Settings.IdleSitEnabled && AllowRecoverySit())
+            {
+                me = _world.Me;
+                var needHpSit = me.EffectiveMaxHp > 0 && me.HpPct < Settings.PostKillSitHpBelowPct;
+                var needMpSit = Settings.RecoverySitMpBelowPct > 0 && me.EffectiveMaxMp > 0 && me.MpPct < Settings.RecoverySitMpBelowPct;
+                if (needHpSit || needMpSit)
+                    await RecoverAsync(Settings.PostKillStandHpPct, ct);
             }
 
-            try
+            TickCoordinatorLeader(BuildContext());
+            await Task.Delay(Math.Max(200, Settings.IdleNoMobsSleepMs), ct);
+            return;
+        }
+
+        var targetOid = mob.ObjectId;
+        _lastCombatTargetOid = targetOid;
+        _log.Info($"[AutoCombat] Target: npcId={mob.NpcTypeId} oid=0x{targetOid:X} dist={Math.Sqrt(CombatService.DistanceSq(me.X, me.Y, mob.X, mob.Y)):0}");
+
+        await EnsureStandingAsync(ct);
+        if (ct.IsCancellationRequested) return;
+
+        // Target the mob via Action (0x04)
+        ctx = BuildContext();
+        me = ctx.World.Me;
+        _combat.TryInject(ctx, PacketBuilder.BuildAction(targetOid, me.X, me.Y, me.Z, 0), "target-action");
+        SetCombatPhase("targeting");
+        await Task.Delay(Math.Max(50, Settings.PostTargetDelayMs), ct);
+        if (ct.IsCancellationRequested) return;
+
+        // Spoil BEFORE attack rotation: rotation skills trigger MagicSkillLaunched → SelfCastLock and block Spoil otherwise.
+        var spoilAttempts = 0;
+        var spoilIntervalMs = Math.Max(500, Settings.SpoilRetryIntervalMs);
+        if (Settings.SpoilEnabled && Settings.SpoilSkillId > 0)
+        {
+            await Task.Delay(120, ct);
+            if (ct.IsCancellationRequested) return;
+            ctx = BuildContext();
+            me = ctx.World.Me;
+            if (CombatService.IsWithinSpoilCastRange(ctx, me, targetOid))
             {
-                await Task.Delay(180, ct);
+                if (_combat.TryCastSkill(ctx, Settings.SpoilSkillId, forBuff: false,
+                        cooldownOverrideMs: spoilIntervalMs, allowReservedSkill: true, bypassSelfCastLock: true))
+                {
+                    spoilAttempts++;
+                    _log.Info($"[AutoCombat] Spoil attempt #{spoilAttempts} on 0x{targetOid:X}");
+                }
+                else
+                    _log.Info($"[AutoCombat] Spoil opening blocked skillId={Settings.SpoilSkillId} decision={_combat.LastDecision}");
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            else
+                _log.Info($"[AutoCombat] Spoil opening skipped (out of range > {Settings.SpoilMaxCastDistance}), retry in kill loop");
+
+            await Task.Delay(350, ct);
+            if (ct.IsCancellationRequested) return;
+        }
+
+        // Combat rotation
+        ctx = BuildContext();
+        _combat.TryUseCombatRotation(ctx, targetOid);
+        await Task.Delay(120, ct);
+        if (ct.IsCancellationRequested) return;
+
+        // Force attack (melee/spoiler only — casters rely on skills)
+        if (!IsCasterMode())
+        {
+            ctx = BuildContext();
+            _combat.TrySendAttack(ctx, ctx.World.Me, targetOid, "engage");
+        }
+
+        // === KILL LOOP ===
+        await KillLoopAsync(targetOid, spoilAttempts, ct);
+        if (ct.IsCancellationRequested) return;
+
+        // Post-kill: Sweep
+        if (Settings.SpoilEnabled && Settings.SweepEnabled && Settings.SweepSkillId > 0)
+        {
+            ctx = BuildContext();
+            me = ctx.World.Me;
+            _combat.TryInject(ctx, PacketBuilder.BuildAction(targetOid, me.X, me.Y, me.Z, 0), "sweep-target");
+            await Task.Delay(Math.Max(50, Settings.PostKillSweepDelayMs), ct);
+            ctx = BuildContext();
+            _combat.TryCastSkill(ctx, Settings.SweepSkillId, forBuff: false,
+                cooldownOverrideMs: 350, allowReservedSkill: true, bypassSelfCastLock: true);
+            await Task.Delay(350, ct);
+        }
+
+        // Cancel target
+        ctx = BuildContext();
+        _combat.TryInject(ctx, PacketBuilder.BuildTargetCancel(), "post-kill-cancel");
+
+        // Post-kill loot (casters skip walking to distant items — collect during idle/pre-combat)
+        if (Settings.AutoLoot)
+        {
+            await Task.Delay(Math.Max(50, Settings.PostKillSpawnWaitMs), ct);
+            await LootNearbyAsync(ct, maxAttempts: 80, walkToItems: !IsCasterMode());
+        }
+
+        // Post-kill recovery
+        if (Settings.PostKillSitEnabled && AllowRecoverySit())
+        {
+            me = _world.Me;
+            var needHpSit = me.EffectiveMaxHp > 0 && me.HpPct < Settings.PostKillSitHpBelowPct;
+            var needMpSit = Settings.RecoverySitMpBelowPct > 0 && me.EffectiveMaxMp > 0 && me.MpPct < Settings.RecoverySitMpBelowPct;
+            if (needHpSit || needMpSit)
             {
+                _log.Info($"[AutoCombat] HP={me.HpPct:0}% MP={me.MpPct:0}% after kill — sitting to recover");
+                await RecoverAsync(Settings.PostKillStandHpPct, ct);
+            }
+        }
+
+        await AwaitRestMpIfNeededAsync(ct);
+
+        TickCoordinatorLeader(BuildContext());
+        await Task.Delay(Math.Max(50, Settings.BetweenTargetsSleepMs), ct);
+    }
+
+    private async Task KillLoopAsync(int targetOid, int spoilAttemptsSoFar, CancellationToken ct)
+    {
+        SetCombatPhase("in_kill_loop");
+        var killStart = DateTime.UtcNow;
+        var lastReattack = killStart;
+        var lastRulesTick = killStart;
+        var killTimeoutMs = Math.Max(5000, Settings.KillTimeoutMs);
+        var reattackMs = Math.Max(200, Settings.ReattackIntervalMs);
+        var killTickMs = Math.Max(50, Settings.KillPollTickMs);
+        var rulesTickMs = Math.Max(0, Settings.CombatRulesTickMs);
+        var spoilAttempts = spoilAttemptsSoFar;
+        var spoilDone = !Settings.SpoilEnabled || Settings.SpoilSkillId <= 0;
+        var spoilIntervalMs = Math.Max(500, Settings.SpoilRetryIntervalMs);
+        var nextSpoilAllowedAt = spoilAttemptsSoFar > 0
+            ? DateTime.UtcNow.AddMilliseconds(spoilIntervalMs)
+            : DateTime.UtcNow;
+
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                var ctx = BuildContext();
+                var me = ctx.World.Me;
+
+                // Rest/sit is intentionally not started mid-fight (see AwaitRestMpIfNeededAsync + AllowRecoverySit).
+                // If we are sitting anyway (sync glitch, manual sit, or client state), stand before attacking/healing.
+                if (me.IsSitting)
+                {
+                    if (_rest.TryForceStand(ctx))
+                        _log.Info($"[AutoCombat] Forcing stand — sitting during kill loop (target 0x{targetOid:X})");
+                    await Task.Delay(killTickMs, ct);
+                    continue;
+                }
+
+                if (_heal.TickSelfHeal(ctx, inFight: true))
+                {
+                    await Task.Delay(120, ct);
+                    continue;
+                }
+
+                TrackIncomingDamage(ctx);
+
+                if (IsTargetEliminated(ctx, targetOid))
+                {
+                    _log.Info($"[AutoCombat] Mob dead after {(DateTime.UtcNow - killStart).TotalSeconds:0.#}s");
+                    break;
+                }
+
+                if ((DateTime.UtcNow - killStart).TotalMilliseconds >= killTimeoutMs)
+                {
+                    _log.Info($"[AutoCombat] Kill timeout ({killTimeoutMs}ms)");
+                    _lastCombatTargetOid = 0;
+                    break;
+                }
+
+                var now = DateTime.UtcNow;
+
+                // Spoil retry: decoupled from CombatRulesTickMs — use SpoilRetryIntervalMs; skip injects while out of cast range (no attempt count).
+                if (!spoilDone && now >= nextSpoilAllowedAt)
+                {
+                    if (ctx.World.Npcs.TryGetValue(targetOid, out var targetNpc) && targetNpc.SpoilSucceeded)
+                    {
+                        spoilDone = true;
+                        _log.Info($"[AutoCombat] Spoil SUCCESS on 0x{targetOid:X} after {spoilAttempts} attempt(s)");
+                    }
+                    else
+                    {
+                        var maxSpoilAttempts = Math.Max(1, Settings.SpoilMaxAttemptsPerTarget);
+                        if (Settings.SpoilOncePerTarget && spoilAttempts >= maxSpoilAttempts)
+                        {
+                            spoilDone = true;
+                            _log.Info($"[AutoCombat] Spoil max attempts ({maxSpoilAttempts}) reached on 0x{targetOid:X}");
+                        }
+                        else if (!CombatService.IsWithinSpoilCastRange(ctx, me, targetOid))
+                        {
+                            // Still walking in — do not consume tries or spam packets.
+                        }
+                        else
+                        {
+                            nextSpoilAllowedAt = now.AddMilliseconds(spoilIntervalMs);
+                            ctx = BuildContext();
+                            me = ctx.World.Me;
+                            if (_combat.TryCastSkill(ctx, Settings.SpoilSkillId, forBuff: false,
+                                    cooldownOverrideMs: spoilIntervalMs, allowReservedSkill: true, bypassSelfCastLock: true))
+                            {
+                                spoilAttempts++;
+                                if (spoilAttempts <= 3 || spoilAttempts % 6 == 0)
+                                    _log.Info($"[AutoCombat] Spoil #{spoilAttempts} on 0x{targetOid:X}");
+                            }
+                        }
+                    }
+                }
+
+                // Aggro retarget
+                if (Settings.PreferAggroMobs)
+                {
+                    var aggroMob = _targeting.SelectEmergencyAggroTarget(ctx, me);
+                    if (aggroMob is not null && aggroMob.ObjectId != targetOid)
+                    {
+                        _log.Info($"[AutoCombat] Retarget to aggro 0x{aggroMob.ObjectId:X}");
+                        targetOid = aggroMob.ObjectId;
+                        _lastCombatTargetOid = targetOid;
+                        killStart = DateTime.UtcNow;
+                        spoilAttempts = 0;
+                        spoilDone = !Settings.SpoilEnabled || Settings.SpoilSkillId <= 0;
+                        nextSpoilAllowedAt = DateTime.UtcNow;
+
+                        _combat.TryInject(ctx, PacketBuilder.BuildAction(targetOid, me.X, me.Y, me.Z, 0), "retarget");
+                        await Task.Delay(120, ct);
+
+                        if (Settings.SpoilEnabled && Settings.SpoilSkillId > 0)
+                        {
+                            ctx = BuildContext();
+                            me = ctx.World.Me;
+                            if (CombatService.IsWithinSpoilCastRange(ctx, me, targetOid)
+                                && _combat.TryCastSkill(ctx, Settings.SpoilSkillId, forBuff: false,
+                                    cooldownOverrideMs: spoilIntervalMs, allowReservedSkill: true, bypassSelfCastLock: true))
+                            {
+                                spoilAttempts++;
+                                nextSpoilAllowedAt = DateTime.UtcNow.AddMilliseconds(spoilIntervalMs);
+                                _log.Info($"[AutoCombat] Spoil attempt #{spoilAttempts} on retarget 0x{targetOid:X}");
+                            }
+
+                            await Task.Delay(400, ct);
+                        }
+
+                        ctx = BuildContext();
+                        _combat.TryUseCombatRotation(ctx, targetOid);
+                        if (!IsCasterMode())
+                        {
+                            ctx = BuildContext();
+                            _combat.TrySendAttack(ctx, ctx.World.Me, targetOid, "retarget");
+                        }
+
+                        lastReattack = DateTime.UtcNow;
+                        lastRulesTick = DateTime.UtcNow;
+                    }
+                }
+
+                // Periodic combat rules
+                if (rulesTickMs > 0 && (now - lastRulesTick).TotalMilliseconds >= rulesTickMs)
+                {
+                    ctx = BuildContext();
+                    _combat.TryUseCombatRotation(ctx, targetOid);
+                    lastRulesTick = DateTime.UtcNow;
+                }
+
+                // Periodic re-attack
+                if ((now - lastReattack).TotalMilliseconds >= reattackMs)
+                {
+                    if (!IsCasterMode())
+                    {
+                        ctx = BuildContext();
+                        me = ctx.World.Me;
+                        _combat.TryInject(ctx, PacketBuilder.BuildAction(targetOid, me.X, me.Y, me.Z, 0), "reattack-target");
+                        await Task.Delay(120, ct);
+                    }
+                    ctx = BuildContext();
+                    _combat.TryUseCombatRotation(ctx, targetOid);
+                    if (!IsCasterMode())
+                    {
+                        ctx = BuildContext();
+                        _combat.TrySendAttack(ctx, ctx.World.Me, targetOid, "reattack");
+                    }
+                    lastReattack = DateTime.UtcNow;
+                }
+
+                await Task.Delay(killTickMs, ct);
+            }
+        }
+        finally
+        {
+            SetCombatPhase("post-kill");
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    // Recovery (ported from Python _wait_recovery / _ensure_sitting/standing)
+    // ------------------------------------------------------------------ //
+
+    /// <param name="standMpPctOverride">When set (1–100), stand up once MP% reaches this; otherwise uses <see cref="BotSettings.RecoveryStandMpPct"/> (0 = ignore MP).</param>
+    private async Task RecoverAsync(int standHpPct, CancellationToken ct, int? standMpPctOverride = null)
+    {
+        SetCombatPhase("recovering");
+        _combat.SetDecision("recovering");
+        _rest.Reset();
+
+        if (!_world.Me.IsSitting)
+        {
+            var ctx = BuildContext();
+            _combat.TryInject(ctx, PacketBuilder.BuildActionUse(0), "recovery-sit");
+            await Task.Delay(800, ct);
+        }
+
+        var maxWaitMs = Settings.RecoveryMaxWaitSec * 1000;
+        var start = DateTime.UtcNow;
+        var lastHp = _world.Me.CurHp;
+        var mpTarget = standMpPctOverride ?? Settings.RecoveryStandMpPct;
+
+        while (!ct.IsCancellationRequested && (DateTime.UtcNow - start).TotalMilliseconds < maxWaitMs)
+        {
+            await Task.Delay(1000, ct);
+            var me = _world.Me;
+
+            if (me.CurHp <= 0)
+            {
+                _log.Info("[AutoCombat] Recovery interrupted — died");
+                break;
+            }
+
+            if (me.CurHp < lastHp)
+            {
+                _log.Info($"[AutoCombat] Recovery interrupted — HP dropped {lastHp}->{me.CurHp}");
+                break;
+            }
+            lastHp = me.CurHp;
+
+            var aggroCutoff = DateTime.UtcNow.AddMilliseconds(-Settings.IncomingDamageSitBlockMs);
+            foreach (var n in _world.Npcs.Values)
+            {
+                if (n.IsAttackable && !n.IsDead && n.LastAggroHitAtUtc >= aggroCutoff)
+                {
+                    _log.Info($"[AutoCombat] Recovery interrupted — aggro mob 0x{n.ObjectId:X} detected");
+                    goto exitRecovery;
+                }
+            }
+
+            var hpOk = me.EffectiveMaxHp <= 0 || me.HpPct >= standHpPct;
+            var mpOk = mpTarget <= 0 || me.EffectiveMaxMp <= 0 || me.MpPct >= mpTarget;
+            if (hpOk && mpOk)
+            {
+                _log.Info($"[AutoCombat] Recovery done — HP={me.HpPct:0}% MP={me.MpPct:0}%");
                 break;
             }
         }
+        exitRecovery:
+
+        await EnsureStandingAsync(ct, afterRecovery: true);
+        SetCombatPhase("idle");
+        await Task.Delay(500, ct);
     }
 
-    private bool TickDeadStop()
+    /// <summary>
+    /// Sit until MP reaches Stand MP% when Rest is enabled (Combat tab). AutoFight previously skipped <see cref="RestService"/> entirely.
+    /// </summary>
+    private async Task AwaitRestMpIfNeededAsync(CancellationToken ct)
     {
-        var me = _world.Me;
-        var isDead = me.CurHp <= 0 || me.MaxHp <= 0;
-        var now = DateTime.UtcNow;
-
-        if (isDead)
-        {
-            if (!_deadStopActive)
-            {
-                _deadStopActive = true;
-                ResetPostKillState();
-                ResetCombatState();
-                _nextBuffAt = DateTime.MinValue;
-                _nextSelfHealAt = DateTime.MinValue;
-                _nextGroupHealAt = DateTime.MinValue;
-                _nextPartyHealAt = DateTime.MinValue;
-                _nextLootAt = DateTime.MinValue;
-                _nextMoveAt = DateTime.MinValue;
-                _nextFightActionAt = DateTime.MinValue;
-                SetDecision("dead-stop-enter");
-            }
-
-            SetCombatPhase("dead-wait-res");
-            SetDecision("dead-wait-res");
-            return true;
-        }
-
-        if (!_deadStopActive)
-        {
-            return false;
-        }
-
-        var resumeHpPct = Math.Max(1, Math.Min(99, Settings.DeadStopResumeHpPct));
-        if (me.HpPct < resumeHpPct)
-        {
-            SetCombatPhase("dead-wait-res");
-            SetDecision($"dead-wait-res hp={me.HpPct:0}% need={resumeHpPct}%");
-            return true;
-        }
-
-        if (!IsProxyReady())
-        {
-            SetCombatPhase("dead-wait-res");
-            SetDecision("dead-wait-res proxy-not-ready");
-            return true;
-        }
-
-        _deadStopActive = false;
-        _nextFightActionAt = now;
-        _nextLootAt = now;
-        _nextBuffAt = now;
-        _nextPartyHealAt = now;
-        _nextSelfHealAt = now;
-        SetCombatPhase("acquire");
-        SetDecision($"dead-resume hp={me.HpPct:0}%");
-        return false;
-    }
-
-    private bool TickAutoHeal()
-    {
-        if (!Settings.AutoHeal)
-        {
-            return false;
-        }
-
-        var now = DateTime.UtcNow;
-        if (now < _nextSelfHealAt)
-        {
-            return false;
-        }
+        if (!Settings.RestEnabled)
+            return;
 
         var me = _world.Me;
-        if (me.CurHp <= 0 || me.MaxHp <= 0)
+        if (me.CurHp <= 0 || me.EffectiveMaxMp <= 0)
+            return;
+
+        var sitAt = Math.Clamp(Settings.SitMpPct, 1, 99);
+        var standAt = Math.Max(sitAt + 1, Math.Clamp(Settings.StandMpPct, sitAt + 1, 100));
+        if (me.MpPct > sitAt)
+            return;
+
+        if (!AllowRecoverySit())
         {
-            return false;
+            _log.Info($"[AutoCombat] MP rest skipped (combat target alive or recent damage) mp={me.MpPct:0.#}%");
+            return;
         }
 
-        var hp = me.HpPct;
-        var inFight = _combatTargetObjectId != 0 || _postKillActive || HasRecentIncomingDamage(now, 2200);
-
-        var dynamicRules = Settings.HealRules
-            .Where(x => x.Enabled && x.SkillId > 0 && x.HpBelowPct > 0)
-            .OrderBy(x => x.HpBelowPct)
-            .ToList();
-
-        foreach (var rule in dynamicRules)
-        {
-            if (hp > rule.HpBelowPct)
-            {
-                continue;
-            }
-
-            if (rule.MinMpPct > 0 && me.MpPct < rule.MinMpPct)
-            {
-                continue;
-            }
-
-            if (!rule.InFight && inFight)
-            {
-                continue;
-            }
-
-            if (!TryCastSkill(rule.SkillId, forBuff: true, cooldownOverrideMs: Math.Max(250, rule.CooldownMs)))
-            {
-                continue;
-            }
-
-            _nextSelfHealAt = now.AddMilliseconds(Math.Max(320, rule.CooldownMs / 3));
-            SetDecision($"self-heal-rule:{rule.SkillId}");
-            return true;
-        }
-
-        if (hp > Settings.HealHpThreshold)
-        {
-            return false;
-        }
-
-        var fallbackSelfHealSkillId = ResolveSelfPreservationSkillId();
-        if (fallbackSelfHealSkillId <= 0)
-        {
-            return false;
-        }
-
-        if (!TryCastSkill(fallbackSelfHealSkillId, forBuff: true, cooldownOverrideMs: 900))
-        {
-            return false;
-        }
-
-        _nextSelfHealAt = now.AddMilliseconds(900);
-        SetDecision($"self-heal-fallback:{fallbackSelfHealSkillId}");
-        return true;
+        var hpStandPct = Math.Max(1, Settings.PostKillStandHpPct);
+        _log.Info($"[AutoCombat] MP rest: sitting until MP>={standAt}% HP>={hpStandPct}% (now MP={me.MpPct:0.#}% HP={me.HpPct:0.#}%)");
+        await RecoverAsync(hpStandPct, ct, standAt);
     }
 
-    private void TickPartyHeal()
+    /// <summary>
+    /// Sit/stand is toggled via ActionUse(0). If <see cref="CharacterState.IsSitting"/> is wrong (ChangeWaitType not decoded),
+    /// normal stand logic never sends packets — <paramref name="afterRecovery"/> sends a short pulse sequence anyway.
+    /// </summary>
+    private async Task EnsureStandingAsync(CancellationToken ct, bool afterRecovery = false)
     {
-        if (!Settings.AutoHeal || !Settings.PartySupportEnabled || _criticalHoldActive)
+        var maxAttempts = afterRecovery
+            ? Math.Max(6, Settings.RecoveryStandToggleAttempts)
+            : Math.Max(1, Math.Min(4, Settings.RecoveryStandToggleAttempts));
+
+        for (var i = 0; i < maxAttempts && !ct.IsCancellationRequested; i++)
         {
-            return;
-        }
-
-        var now = DateTime.UtcNow;
-        if (now < _nextPartyHealAt)
-        {
-            return;
-        }
-
-        var me = _world.Me;
-        if (me.CurHp <= 0 || me.MaxHp <= 0)
-        {
-            return;
-        }
-
-        var inFight = _combatTargetObjectId != 0 || _postKillActive || HasRecentIncomingDamage(now, 2200);
-        var rules = GetEffectivePartyHealRules();
-        if (rules.Count == 0)
-        {
-            return;
-        }
-
-        var party = _world.Party.Values.ToList();
-        if (party.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var rule in rules)
-        {
-            if (!rule.Enabled || rule.SkillId <= 0)
+            var sitting = _world.Me.IsSitting;
+            if (!afterRecovery)
             {
-                continue;
-            }
-
-            if (!rule.InFight && inFight)
-            {
-                continue;
-            }
-
-            if (rule.MinMpPct > 0 && me.MpPct < rule.MinMpPct)
-            {
-                continue;
-            }
-
-            var threshold = Math.Max(1, Math.Min(99, rule.HpBelowPct));
-            var lowMembers = party.Where(x => x.HpPct > 0 && x.HpPct < threshold).OrderBy(x => x.HpPct).ToList();
-            if (lowMembers.Count == 0)
-            {
-                continue;
-            }
-
-            var ruleKey = $"{rule.Mode}:{rule.SkillId}:{threshold}";
-            if (_nextPartyHealRuleAt.TryGetValue(ruleKey, out var nextRuleAt) && now < nextRuleAt)
-            {
-                continue;
-            }
-
-            if (rule.Mode == PartyHealMode.Target)
-            {
-                var targetMember = lowMembers[0];
-                if (targetMember.ObjectId == 0)
-                {
-                    continue;
-                }
-
-                if (me.TargetId != targetMember.ObjectId)
-                {
-                    if (now < _nextTargetActionAt)
-                    {
-                        continue;
-                    }
-
-                    if (!TryInject(PacketBuilder.BuildAction(targetMember.ObjectId, me.X, me.Y, me.Z, 0), "party-heal-target-confirm"))
-                    {
-                        continue;
-                    }
-
-                    _nextTargetActionAt = now.AddMilliseconds(520);
-                    _nextPartyHealAt = now.AddMilliseconds(180);
-                    SetDecision($"party-heal-target-confirm:0x{targetMember.ObjectId:X}");
+                if (!sitting)
                     return;
-                }
             }
-
-            var ruleCooldown = Math.Max(320, rule.CooldownMs);
-            if (!TryCastSkill(rule.SkillId, forBuff: true, cooldownOverrideMs: ruleCooldown))
+            else if (!sitting && i >= 2)
             {
-                continue;
-            }
-
-            _nextPartyHealRuleAt[ruleKey] = now.AddMilliseconds(ruleCooldown);
-            _nextPartyHealAt = now.AddMilliseconds(220);
-            _nextGroupHealAt = _nextPartyHealAt;
-            SetDecision($"party-heal:{rule.Mode}:{rule.SkillId}");
-            return;
-        }
-    }
-
-    private List<PartyHealRuleSetting> GetEffectivePartyHealRules()
-    {
-        var configured = Settings.PartyHealRules
-            .Where(x => x.SkillId > 0)
-            .ToList();
-
-        if (configured.Count > 0)
-        {
-            return configured;
-        }
-
-        if (Settings.GroupHealSkillId <= 0)
-        {
-            return [];
-        }
-
-        return
-        [
-            new PartyHealRuleSetting
-            {
-                SkillId = Settings.GroupHealSkillId,
-                Mode = PartyHealMode.Group,
-                HpBelowPct = Math.Max(1, Math.Min(99, Settings.PartyHealHpThreshold)),
-                MinMpPct = 0,
-                CooldownMs = 1200,
-                InFight = true,
-                Enabled = true
-            }
-        ];
-    }
-
-    private int ResolveSelfPreservationSkillId()
-    {
-        if (Settings.SelfHealSkillId > 0 && _world.Skills.ContainsKey(Settings.SelfHealSkillId))
-        {
-            return Settings.SelfHealSkillId;
-        }
-
-        if (Settings.SelfHealSkillId > 0)
-        {
-            // Keep explicit self-heal as fallback even if skill list parsing is incomplete.
-            return Settings.SelfHealSkillId;
-        }
-
-        var healRuleSkillId = Settings.HealRules
-            .Where(x => x.Enabled && x.SkillId > 0 && _world.Skills.ContainsKey(x.SkillId))
-            .OrderBy(x => x.HpBelowPct)
-            .Select(x => x.SkillId)
-            .FirstOrDefault();
-        if (healRuleSkillId > 0)
-        {
-            return healRuleSkillId;
-        }
-
-        var fallbackHealRuleSkillId = Settings.HealRules
-            .Where(x => x.Enabled && x.SkillId > 0)
-            .OrderBy(x => x.HpBelowPct)
-            .Select(x => x.SkillId)
-            .FirstOrDefault();
-        if (fallbackHealRuleSkillId > 0)
-        {
-            return fallbackHealRuleSkillId;
-        }
-
-        var partyRuleSkillId = GetEffectivePartyHealRules()
-            .Where(x => x.Enabled && x.SkillId > 0 && _world.Skills.ContainsKey(x.SkillId))
-            .Select(x => x.SkillId)
-            .FirstOrDefault();
-        if (partyRuleSkillId > 0)
-        {
-            return partyRuleSkillId;
-        }
-
-        var fallbackPartyRuleSkillId = GetEffectivePartyHealRules()
-            .Where(x => x.Enabled && x.SkillId > 0)
-            .Select(x => x.SkillId)
-            .FirstOrDefault();
-        // Teon mage fallback when profile has no explicit heal rule yet.
-        if (_world.Me.ClassId == 10)
-        {
-            return 1015;
-        }
-
-        return fallbackPartyRuleSkillId;
-    }
-    private List<BuffRuleSetting> GetEffectiveBuffRules()
-    {
-        var configured = Settings.BuffRules
-            .Where(x => x.SkillId > 0)
-            .ToList();
-
-        if (configured.Count > 0)
-        {
-            return configured;
-        }
-
-        if (Settings.BuffSkillId <= 0)
-        {
-            return [];
-        }
-
-        return
-        [
-            new BuffRuleSetting
-            {
-                SkillId = Settings.BuffSkillId,
-                Scope = Settings.GroupBuff ? BuffTargetScope.Both : BuffTargetScope.Self,
-                AutoDetect = true,
-                DelaySec = 18,
-                MinMpPct = 0,
-                InFight = true,
-                Enabled = true
-            }
-        ];
-    }
-
-    private void TickAutoBuff()
-    {
-        if (!Settings.AutoBuff)
-        {
-            return;
-        }
-
-        var me = _world.Me;
-        if (me.CurHp <= 0 || me.MaxHp <= 0)
-        {
-            return;
-        }
-
-        if (me.IsSitting)
-        {
-            SetDecision("buff-paused-sitting");
-            return;
-        }
-
-        if (_criticalHoldActive
-            || _postKillActive
-            || string.Equals(_combatPhase, "target-confirm", StringComparison.Ordinal)
-            || string.Equals(_combatPhase, "post-kill-sweep", StringComparison.Ordinal))
-        {
-            SetDecision("buff-paused-combat-phase");
-            return;
-        }
-
-        var now = DateTime.UtcNow;
-        if (now < _nextBuffAt)
-        {
-            return;
-        }
-
-        var inFight = _combatTargetObjectId != 0 || _postKillActive || HasRecentIncomingDamage(now, 2200);
-        var hasFreshAbnormal = me.AbnormalUpdatedAtUtc != DateTime.MinValue && (now - me.AbnormalUpdatedAtUtc).TotalSeconds <= 90;
-        var rules = GetEffectiveBuffRules();
-        if (rules.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var rule in rules)
-        {
-            if (!rule.Enabled || rule.SkillId <= 0)
-            {
-                continue;
-            }
-
-            if (!rule.InFight && inFight)
-            {
-                continue;
-            }
-
-            if (rule.MinMpPct > 0 && me.MpPct < rule.MinMpPct)
-            {
-                continue;
-            }
-
-            var needsParty = rule.Scope is BuffTargetScope.Party or BuffTargetScope.Both;
-            if (needsParty && _world.Party.IsEmpty)
-            {
-                if (rule.Scope == BuffTargetScope.Party)
-                {
-                    continue;
-                }
-            }
-
-            var delaySec = Math.Max(6, rule.DelaySec);
-            var ruleKey = $"{rule.SkillId}:{rule.Scope}:{rule.AutoDetect}:{delaySec}";
-            if (_nextBuffRuleAt.TryGetValue(ruleKey, out var nextRuleAt) && now < nextRuleAt)
-            {
-                continue;
-            }
-
-            var canDetectSelf = hasFreshAbnormal && rule.Scope is BuffTargetScope.Self or BuffTargetScope.Both;
-            if (rule.AutoDetect && canDetectSelf && me.AbnormalEffectSkillIds.Contains(rule.SkillId))
-            {
-                _nextBuffRuleAt[ruleKey] = now.AddSeconds(delaySec);
-                _nextBuffAt = now.AddMilliseconds(220);
-                SetDecision($"buff-active:{rule.SkillId}");
-                continue;
-            }
-
-            // Self-buff: target yourself first so the server applies the buff to self, not to a mob
-            if (rule.Scope is BuffTargetScope.Self or BuffTargetScope.Both && me.ObjectId != 0 && me.TargetId != me.ObjectId)
-            {
-                TryInject(PacketBuilder.BuildAction(me.ObjectId, me.X, me.Y, me.Z, 0), $"self-target-buff:{rule.SkillId}");
-            }
-
-            if (!TryCastSkill(rule.SkillId, forBuff: true, cooldownOverrideMs: 1200))
-            {
-                _nextBuffRuleAt[ruleKey] = now.AddMilliseconds(1000);
-                _nextBuffAt = now.AddMilliseconds(420);
-                continue;
-            }
-
-            _nextBuffRuleAt[ruleKey] = now.AddSeconds(delaySec);
-            _nextBuffAt = now.AddMilliseconds(320);
-            SetDecision($"buff-cast:{rule.SkillId}:{rule.Scope}");
-            return;
-        }
-    }
-
-    private void TickAutoFight()
-    {
-        var now = DateTime.UtcNow;
-        if (!Settings.AutoFight)
-        {
-            if (now >= _nextAutoFightDisabledLogAt)
-            {
-                _nextAutoFightDisabledLogAt = now.AddSeconds(4);
-                SetCombatPhase("autofight-disabled");
-                SetDecision("autofight-disabled");
-                _log.Info("[AutoFight] skipped: AutoFight=false");
-            }
-
-            _nextFightActionAt = now.AddMilliseconds(280);
-            return;
-        }
-
-        var me = _world.Me;
-        var criticalEnterHpPct = Math.Max(10, Math.Min(95, Settings.CriticalHoldEnterHpPct));
-        var isCriticalHp = me.MaxHp > 0 && me.HpPct > 0 && me.HpPct <= criticalEnterHpPct;
-
-        if (now < _nextFightActionAt && !isCriticalHp)
-        {
-            return;
-        }
-
-        EnsureCoordinatorMode();
-        TrackIncomingDamage(me, now);
-
-        var strictCaster = IsCasterRole();
-        if (me.IsSitting)
-        {
-            var shouldForceStand = _combatTargetObjectId != 0 || me.TargetId != 0 || HasRecentIncomingDamage(now, 1600);
-            if (shouldForceStand
-                && now >= _nextRestToggleAt
-                && TryInject(PacketBuilder.BuildActionUse(0), "force-stand-before-engage"))
-            {
-                _nextRestToggleAt = now.AddMilliseconds(950);
-                _nextFightActionAt = now.AddMilliseconds(170);
-                SetCombatPhase("force-stand-before-engage");
-                SetDecision("force-stand-before-engage");
                 return;
             }
 
-            SetCombatPhase("paused-sitting");
-            SetDecision("fight-paused-sitting");
-            _nextFightActionAt = now.AddMilliseconds(250);
-            return;
-        }
-        if (Settings.EnableSupportV2 && IsSupportRole() && !Settings.SupportAllowDamage)
-        {
-            if (Settings.EnableRoleCoordinator
-                && Settings.CoordMode == CoordMode.CoordinatorFollower
-                && _coordinator.TryGetLatestIntent(Settings.CoordinatorStaleMs, out var supportIntent)
-                && TryFollowLeaderIntent(me, supportIntent, now))
-            {
-                SetCombatPhase("support-follow-leader");
-                _nextFightActionAt = now.AddMilliseconds(220);
+            if (!afterRecovery)
+                _log.Info("[AutoCombat] Standing up");
+            else if (i == 0 || sitting)
+                _log.Info($"[AutoCombat] Recovery exit: stand toggle {i + 1}/{maxAttempts} (parsed sitting={sitting})");
+
+            var ctx = BuildContext();
+            _combat.TryInject(ctx, PacketBuilder.BuildActionUse(0), afterRecovery ? $"recovery-stand-{i}" : $"stand-{i}");
+            await Task.Delay(afterRecovery ? 950 : 800, ct);
+
+            if (!_world.Me.IsSitting)
                 return;
-            }
-            SetCombatPhase("support-hold");
-            SetDecision("support-hold");
-            _nextFightActionAt = now.AddMilliseconds(280);
-            return;
         }
-        TrackIncomingDamage(me, now);
-        PublishLeaderIntent(me, _combatTargetObjectId, _combatPhase, now);
-
-        var criticalResumeHpPct = Math.Max(criticalEnterHpPct + 1, Math.Min(99, Settings.CriticalHoldResumeHpPct));
-
-        if (_criticalHoldActive)
-        {
-            var canResume = me.MaxHp > 0 && me.HpPct >= criticalResumeHpPct;
-            if (canResume)
-            {
-                _criticalHoldActive = false;
-                _nextFightActionAt = DateTime.MinValue;
-                _nextRestToggleAt = DateTime.MinValue;
-                SetDecision($"critical-hp-resume hp={me.HpPct:0}%");
-            }
-        }
-        else if (isCriticalHp)
-        {
-            _criticalHoldActive = true;
-        }
-
-        if (_criticalHoldActive)
-        {
-            var emergencySelfHealSkillId = ResolveSelfPreservationSkillId();
-            if (emergencySelfHealSkillId > 0 && now >= _nextSelfHealAt)
-            {
-                if (TryCastSkill(emergencySelfHealSkillId, forBuff: true, cooldownOverrideMs: 900))
-                {
-                    _nextSelfHealAt = now.AddMilliseconds(900);
-                }
-            }
-
-            if (_combatTargetObjectId != 0)
-            {
-                _temporarilyIgnoredTargets[_combatTargetObjectId] = now.AddSeconds(12);
-                TryInject(PacketBuilder.BuildTargetCancel(), "critical-hp-cancel-target");
-                ClearSpoilPendingTarget(_combatTargetObjectId);
-                ResetCombatState();
-                _lastAutoTargetObjectId = 0;
-            }
-
-            SetCombatPhase("critical-hp-hold");
-            SetDecision($"critical-hp-hold hp={me.HpPct:0}% resume={criticalResumeHpPct}%");
-            _nextFightActionAt = now.AddMilliseconds(620);
-            return;
-        }
-        var overpullHoldHpPct = Math.Max(50, Settings.CriticalHoldResumeHpPct);
-        if (_combatTargetObjectId == 0 && me.MaxHp > 0 && me.HpPct < overpullHoldHpPct)
-        {
-            var freshAggroCount = CountFreshAggroAttackers(me, now);
-            if (freshAggroCount >= 2)
-            {
-                var overpullSelfHealSkillId = ResolveSelfPreservationSkillId();
-                if (overpullSelfHealSkillId > 0 && now >= _nextSelfHealAt)
-                {
-                    if (TryCastSkill(overpullSelfHealSkillId, forBuff: true, cooldownOverrideMs: 900))
-                    {
-                        _nextSelfHealAt = now.AddMilliseconds(900);
-                    }
-                }
-
-                SetCombatPhase("overpull-hold");
-                SetDecision($"overpull-hold hp={me.HpPct:0}% aggro={freshAggroCount}");
-                _nextFightActionAt = now.AddMilliseconds(420);
-                return;
-            }
-        }
-
-        var mpSitAt = Math.Max(1, Math.Min(99, Settings.SitMpPct));
-        var mpStandAt = Math.Max(mpSitAt + 1, Math.Min(100, Settings.StandMpPct));
-        if (!_postKillActive && _combatTargetObjectId == 0 && !HasRecentIncomingDamage(now, 2500))
-        {
-            if (me.MpPct <= mpSitAt)
-            {
-                if (!me.IsSitting && now >= _nextRestToggleAt && TryInject(PacketBuilder.BuildActionUse(0), "rest-sit-low-mp-hold"))
-                {
-                    _nextRestToggleAt = now.AddMilliseconds(950);
-                    _restExpectedIsSitting = true;
-                    _restExpectedStateUntilUtc = now.AddSeconds(4);
-                }
-
-                SetCombatPhase("rest-mp-hold");
-                SetDecision($"rest-mp-hold mp={me.MpPct:0.#}%<= {mpSitAt}%");
-                _nextFightActionAt = now.AddMilliseconds(350);
-                return;
-            }
-
-            if (me.IsSitting && me.MpPct < mpStandAt)
-            {
-                SetCombatPhase("rest-mp-hold");
-                SetDecision($"rest-mp-hold mp={me.MpPct:0.#}%< {mpStandAt}%");
-                _nextFightActionAt = now.AddMilliseconds(350);
-                return;
-            }
-        }
-
-        if (_postKillActive)
-        {
-            if (RunPostKillSweepAndLoot(me, now))
-            {
-                _nextFightActionAt = now.AddMilliseconds(180);
-                return;
-            }
-
-            // If post-kill has just completed this tick, do not instantly reacquire.
-            // Yield one tick so low-mp/rest/defensive guards can run first.
-            _nextFightActionAt = now.AddMilliseconds(140);
-            return;
-        }
-
-        EnsureHuntCenterAnchor(me);
-        var huntCenter = GetHuntCenter(me);
-        var fightRange = Math.Max(100, Settings.FightRange);
-        var fightRangeSq = (long)fightRange * fightRange;
-
-        NpcState? target = null;
-
-        if (_combatTargetObjectId != 0)
-        {
-            var killTimeoutMs = Math.Max(6000, Settings.KillTimeoutMs);
-            var timedOut = _combatTargetAssignedAtUtc != DateTime.MinValue
-                && (now - _combatTargetAssignedAtUtc).TotalMilliseconds >= killTimeoutMs;
-
-            if (_world.Npcs.TryGetValue(_combatTargetObjectId, out var lockedTarget))
-            {
-                UpdateCombatTargetSnapshot(lockedTarget, now);
-
-                if (lockedTarget.IsDead || lockedTarget.HpPct <= 0.01f)
-                {
-                    BeginPostKill(lockedTarget, now, "target-eliminated");
-                    _nextFightActionAt = now.AddMilliseconds(220);
-                    return;
-                }
-
-                if (timedOut)
-                {
-                    _killTimeoutFireCount++;
-
-                    // Hard-abandon takes priority after 3 consecutive kill-timeouts.
-                    // Must be checked BEFORE the reengage block, which does an early return
-                    // and would prevent this from ever being reached on the 3rd timeout.
-                    if (_killTimeoutFireCount >= 3)
-                    {
-                        _log.Info($"[AutoFight] hard-abandon after {_killTimeoutFireCount} timeouts oid=0x{lockedTarget.ObjectId:X}; ignoring 30s");
-                        _temporarilyIgnoredTargets[lockedTarget.ObjectId] = now.AddSeconds(30);
-                        ClearSpoilPendingTarget(lockedTarget.ObjectId);
-                        ResetCombatState();
-                        _killTimeoutFireCount = 0;
-                        _lastAutoTargetObjectId = 0;
-                        _nextFightActionAt = now.AddMilliseconds(260);
-                        return;
-                    }
-
-                    var staleProgress = _combatLastProgressAtUtc != DateTime.MinValue
-                        && (now - _combatLastProgressAtUtc).TotalMilliseconds >= Math.Max(5200, Settings.AttackNoProgressWindowMs + 1200);
-                    var noRecentIncoming = _lastIncomingDamageAtUtc == DateTime.MinValue
-                        || (now - _lastIncomingDamageAtUtc).TotalMilliseconds >= 2200;
-                    var noRecentOutgoing = lockedTarget.LastHitByMeAtUtc == DateTime.MinValue
-                        || (now - lockedTarget.LastHitByMeAtUtc).TotalMilliseconds >= 2200;
-
-                    if (staleProgress && noRecentIncoming && noRecentOutgoing)
-                    {
-                        _log.Info($"[AutoFight] kill-timeout target=0x{lockedTarget.ObjectId:X} elapsed={(now - _combatTargetAssignedAtUtc).TotalSeconds:0.0}s attempt={_killTimeoutFireCount}");
-                        SetCombatPhase("kill-timeout-reengage");
-                        if (now >= _nextTargetActionAt
-                            && TryInject(PacketBuilder.BuildAction(lockedTarget.ObjectId, me.X, me.Y, me.Z, 0), "kill-timeout-target-action"))
-                        {
-                            _nextTargetActionAt = now.AddMilliseconds(1300);
-                        }
-
-                        if (strictCaster)
-                        {
-                            _ = TryUseCombatRotation();
-                        }
-                        else if (now >= _nextForceAttackAt && TrySendAttack(me, lockedTarget.ObjectId, "kill-timeout-attack"))
-                        {
-                            _nextForceAttackAt = now.AddMilliseconds(980);
-                        }
-
-                        _combatTargetAssignedAtUtc = now;
-                        _combatLastProgressAtUtc = now;
-                        _nextFightActionAt = now.AddMilliseconds(680);
-                        return;
-                    }
-                }
-
-                if (Settings.FinishCurrentTargetBeforeAggroRetarget)
-                {
-                    target = lockedTarget;
-                }
-                else
-                {
-                    var stickyDistSq = DistanceSq(huntCenter.x, huntCenter.y, lockedTarget.X, lockedTarget.Y);
-                    if (stickyDistSq <= fightRangeSq)
-                    {
-                        target = lockedTarget;
-                    }
-                }
-            }
-            else
-            {
-                var hadTime = _combatTargetAssignedAtUtc != DateTime.MinValue
-                    && (now - _combatTargetAssignedAtUtc).TotalMilliseconds >= 1200;
-
-                var likelyEliminated = _combatTargetLastHpPct >= 0 && _combatTargetLastHpPct <= 1f;
-                var recentlyEngaged = _combatTargetLastHitByMeAtUtc != DateTime.MinValue
-                    && (now - _combatTargetLastHitByMeAtUtc).TotalMilliseconds <= 4500;
-                var missingLongEnough = _combatTargetLastSeenAtUtc != DateTime.MinValue
-                    && (now - _combatTargetLastSeenAtUtc).TotalMilliseconds >= 700;
-
-                if (hadTime && missingLongEnough && (likelyEliminated || (_combatTargetSpoilSucceeded && recentlyEngaged)))
-                {
-                    BeginPostKillFromSnapshot(now, "target-disappeared");
-                    _nextFightActionAt = now.AddMilliseconds(220);
-                    return;
-                }
-
-                ResetCombatState();
-                _lastAutoTargetObjectId = 0;
-            }
-        }
-
-        if (target is null && _spoilPendingTargetObjectId != 0)
-        {
-            if (now > _spoilPendingUntilUtc
-                || !_world.Npcs.TryGetValue(_spoilPendingTargetObjectId, out var spoilPendingNpc)
-                || spoilPendingNpc.IsDead)
-            {
-                ClearSpoilPendingTarget();
-            }
-            else
-            {
-                var pendingDistSq = DistanceSq(huntCenter.x, huntCenter.y, spoilPendingNpc.X, spoilPendingNpc.Y);
-                if (spoilPendingNpc.IsAttackable && pendingDistSq <= fightRangeSq)
-                {
-                    target = spoilPendingNpc;
-                }
-            }
-        }
-
-        if (target is null && HasRecentIncomingDamage(now, 2200) && now >= _nextEmergencyRetaliateAt)
-        {
-            target = SelectEmergencyAggroTarget(me, now);
-            if (target is not null)
-            {
-                _nextEmergencyRetaliateAt = now.AddMilliseconds(850);
-                SetDecision($"retaliate-aggro oid=0x{target.ObjectId:X}");
-            }
-        }
-
-                if (target is null && TryResolveCoordinatorFollowerTarget(me, now, out var followerTarget))
-        {
-            if (followerTarget is not null)
-            {
-                target = followerTarget;
-            }
-            else if (Settings.EnableRoleCoordinator
-                && Settings.CoordMode == CoordMode.CoordinatorFollower
-                && !Settings.FollowerFallbackToStandalone)
-            {
-                SetCombatPhase("follower-hold-no-target");
-                SetDecision("follower-hold-no-target");
-                _nextFightActionAt = now.AddMilliseconds(Math.Max(260, Settings.CasterCastIntervalMs));
-                return;
-            }
-        }
-        target ??= SelectFightTarget(me, huntCenter.x, huntCenter.y, huntCenter.z);
-        if (target is null)
-        {
-            if (me.TargetId == 0)
-            {
-                if (_temporarilyIgnoredTargets.Count > 0)
-                {
-                    _temporarilyIgnoredTargets.Clear();
-                    SetCombatPhase("idle-reacquire");
-                    _nextFightActionAt = now.AddMilliseconds(120);
-                    return;
-                }
-
-                                _lastAutoTargetObjectId = 0;
-                ResetCombatState();
-                SetCombatPhase("idle-no-target");
-                SetDecision("idle-no-target");
-                if (now >= _nextIdleNoTargetLogAt)
-                {
-                    _nextIdleNoTargetLogAt = now.AddSeconds(4);
-                    _log.Info("[AutoFight] no eligible targets in range; waiting");
-                }
-                _nextFightActionAt = now.AddMilliseconds(180);
-                return;
-            }
-
-            var hasValidExistingTarget = _world.Npcs.TryGetValue(me.TargetId, out var existingTarget)
-                && existingTarget.IsAttackable
-                && !existingTarget.IsDead
-                && existingTarget.HpPct > 0.01f;
-
-            if (!hasValidExistingTarget)
-            {
-                TryInject(PacketBuilder.BuildTargetCancel(), "clear-stale-target");
-                _nextFightActionAt = now.AddMilliseconds(300);
-                return;
-            }
-
-            if (Settings.UseCombatSkills && TryUseCombatRotation())
-            {
-                SetCombatPhase("active-existing-target-skill");
-                _nextFightActionAt = now.AddMilliseconds(350);
-                return;
-            }
-            if (strictCaster
-                && Settings.EnableCasterV2
-                && Settings.CasterFallbackToAttack
-                && now >= _nextForceAttackAt
-                && TrySendAttack(me, me.TargetId, "caster-existing-fallback"))
-            {
-                SetCombatPhase("caster-fallback-attack");
-                _nextForceAttackAt = now.AddMilliseconds(980);
-                _nextFightActionAt = now.AddMilliseconds(Math.Max(320, Settings.CasterCastIntervalMs));
-                return;
-            }
-            if (strictCaster)
-            {
-                SetCombatPhase("strict-caster-wait");
-                SetDecision("strict-caster-wait-no-skill");
-                _nextFightActionAt = now.AddMilliseconds(Math.Max(260, Settings.CasterCastIntervalMs));
-                return;
-            }
-
-            if (now < _nextForceAttackAt)
-            {
-                _nextFightActionAt = now.AddMilliseconds(320);
-                return;
-            }
-
-            if (TrySendAttack(me, me.TargetId, "target-attack"))
-            {
-                SetCombatPhase("active-existing-target-attack");
-                _nextForceAttackAt = now.AddMilliseconds(980);
-            }
-
-            _nextFightActionAt = now.AddMilliseconds(900);
-            return;
-        }
-
-        if (_combatTargetObjectId != target.ObjectId)
-        {
-            ResetCombatState();
-            _combatTargetObjectId = target.ObjectId;
-            _combatTargetAssignedAtUtc = now;
-            _combatLastProgressAtUtc = now;
-            _combatTargetLastHpPct = target.HpPct;
-            _nextSpoilAt = now;
-                        _combatNoProgressStrikes = 0;
-            _combatNoServerTargetSinceUtc = DateTime.MinValue;
-            _nextTargetActionAt = DateTime.MinValue;
-        _preferAttackRequestUntilUtc = DateTime.MinValue;
-        _nextTransportSwitchAtUtc = DateTime.MinValue;
-            UpdateCombatTargetSnapshot(target, now);
-            SetCombatPhase("acquire");
-            _log.Info($"[AutoFight] target {target.Name} oid=0x{target.ObjectId:X} hp={target.HpPct:0.#}%");
-        }
-
-        _lastAutoTargetObjectId = target.ObjectId;
-
-        if (target.IsDead || target.HpPct <= 0.01f)
-        {
-            BeginPostKill(target, now, "target-eliminated");
-            _nextFightActionAt = now.AddMilliseconds(220);
-            return;
-        }
-
-        var targetDistSq = DistanceSq(me.X, me.Y, target.X, target.Y);
-        var hasServerTarget = me.TargetId == target.ObjectId;
-        var canUseAssumedTarget = _assumedTargetObjectId == target.ObjectId
-            && now <= _assumedTargetUntilUtc;
-
-        if (!hasServerTarget && !canUseAssumedTarget)
-        {
-            if (_combatNoServerTargetSinceUtc == DateTime.MinValue)
-            {
-                _combatNoServerTargetSinceUtc = now;
-                _targetConfirmRecoveryStage = 0;
-                _targetConfirmRecoveryStartedAtUtc = now;
-            }
-
-            SetCombatPhase("target-confirm");
-
-            var noProgress = _combatLastProgressAtUtc == DateTime.MinValue
-                || (now - _combatLastProgressAtUtc).TotalMilliseconds >= Math.Max(1200, Settings.CasterCastIntervalMs);
-
-            if (noProgress)
-            {
-                if (_targetConfirmRecoveryStage == 0
-                    && now >= _nextTargetActionAt
-                    && TryInject(PacketBuilder.BuildAction(target.ObjectId, me.X, me.Y, me.Z, 0), "target-confirm-action"))
-                {
-                    _assumedTargetObjectId = target.ObjectId;
-                    _assumedTargetUntilUtc = now.AddMilliseconds(1800);
-                    _nextTargetActionAt = now.AddMilliseconds(760);
-                    _targetConfirmRecoveryStage = 1;
-                    _targetConfirmRecoveryStartedAtUtc = now;
-                    SetDecision($"target-confirm-action:0x{target.ObjectId:X}");
-                }
-
-                if (_targetConfirmRecoveryStage <= 1 && now >= _nextForceAttackAt)
-                {
-                    var (tx, ty, tz) = ResolveTargetPosition(me, target.ObjectId);
-                    if (TryInject(PacketBuilder.BuildForceAttack(target.ObjectId, tx, ty, tz), "target-confirm-force-2f16"))
-                    {
-                        _assumedTargetObjectId = target.ObjectId;
-                        _assumedTargetUntilUtc = now.AddMilliseconds(2400);
-                        _nextForceAttackAt = now.AddMilliseconds(920);
-                        _targetConfirmRecoveryStage = 2;
-                        _targetConfirmRecoveryStartedAtUtc = now;
-                        SetDecision($"target-confirm-force:0x{target.ObjectId:X}");
-                        _nextFightActionAt = now.AddMilliseconds(170);
-                        return;
-                    }
-                }
-
-                var noServerTargetTimeoutMs = Math.Max(3800, Settings.AttackNoProgressWindowMs);
-                var recoveryAgeMs = _targetConfirmRecoveryStartedAtUtc == DateTime.MinValue
-                    ? 0
-                    : (now - _targetConfirmRecoveryStartedAtUtc).TotalMilliseconds;
-                if ((now - _combatNoServerTargetSinceUtc).TotalMilliseconds >= noServerTargetTimeoutMs)
-                {
-                    var staleCount = _stallRetargetCountByTarget.GetValueOrDefault(target.ObjectId);
-                    var ignoreSeconds = staleCount >= 2 ? 35 : 18;
-                    _stallRetargetCountByTarget[target.ObjectId] = staleCount + 1;
-                    _temporarilyIgnoredTargets[target.ObjectId] = now.AddSeconds(ignoreSeconds);
-                    _log.Info($"[AutoFight] no-server-target-timeout oid=0x{target.ObjectId:X}; recovery=action->force age={recoveryAgeMs:0}ms; ignore={ignoreSeconds}s; retarget");
-                    ActivateAttackRequestFallback(now, "no-server-target");
-                    ClearSpoilPendingTarget(target.ObjectId);
-                    ResetCombatState();
-                    _lastAutoTargetObjectId = 0;
-                    SetCombatPhase("retarget-no-server-target");
-                    SetDecision("retarget-no-server-target");
-                    _nextFightActionAt = now.AddMilliseconds(220);
-                    return;
-                }
-            }
-
-            _nextFightActionAt = now.AddMilliseconds(strictCaster ? 220 : 170);
-            return;
-        }
-
-        _combatNoServerTargetSinceUtc = DateTime.MinValue;
-        _targetConfirmRecoveryStage = 0;
-        _targetConfirmRecoveryStartedAtUtc = DateTime.MinValue;
-        _criticalHoldActive = false;
-
-        if (hasServerTarget && _assumedTargetObjectId == target.ObjectId)
-        {
-            _assumedTargetObjectId = 0;
-            _assumedTargetUntilUtc = DateTime.MinValue;
-        }
-
-        ObserveCombatProgress(target, now);
-        UpdateCombatTargetSnapshot(target, now);
-
-        if (target.SpoilSucceeded && _spoilPendingTargetObjectId == target.ObjectId)
-        {
-            ClearSpoilPendingTarget(target.ObjectId);
-        }
-
-        var spoilCombatSignal = hasServerTarget
-            || canUseAssumedTarget
-            || (target.LastHitByMeAtUtc != DateTime.MinValue
-                && (now - target.LastHitByMeAtUtc).TotalMilliseconds <= 2600)
-            || (_lastIncomingDamageAtUtc != DateTime.MinValue
-                && (now - _lastIncomingDamageAtUtc).TotalMilliseconds <= 1800);
-
-        if (TryRunSpoilOpening(target, now, targetDistSq, spoilCombatSignal))
-        {
-            return;
-        }
-
-        var meleeRange = Math.Max(70, Settings.MeleeEngageRange);
-        var meleeRangeSq = (long)meleeRange * meleeRange;
-        if (strictCaster && Settings.EnableCasterV2)
-        {
-            var casterChaseRange = Math.Max(220, Settings.CasterChaseRange);
-            var casterChaseRangeSq = (long)casterChaseRange * casterChaseRange;
-            if (targetDistSq > casterChaseRangeSq)
-            {
-                // Caster stuck detection: if chasing the same target >8s, treat as no-progress strike
-                if (_casterChaseStartedAtUtc == DateTime.MinValue)
-                    _casterChaseStartedAtUtc = now;
-
-                if ((now - _casterChaseStartedAtUtc).TotalMilliseconds >= 8000)
-                {
-                    _casterChaseStartedAtUtc = DateTime.MinValue;
-                    _casterStuckStrikes++;
-                    _combatLastProgressAtUtc = now;
-                    _log.Info($"[AutoFight] caster-stuck oid=0x{target.ObjectId:X} strike={_casterStuckStrikes}; chase >8s without reaching cast range");
-
-                    if (_casterStuckStrikes >= 3)
-                    {
-                        var staleCount = _stallRetargetCountByTarget.GetValueOrDefault(target.ObjectId);
-                        var ignoreSeconds = staleCount >= 2 ? 35 : 15;
-                        _stallRetargetCountByTarget[target.ObjectId] = staleCount + 1;
-                        _temporarilyIgnoredTargets[target.ObjectId] = now.AddSeconds(ignoreSeconds);
-                        _log.Info($"[AutoFight] target-stalled oid=0x{target.ObjectId:X}; ignore={ignoreSeconds}s; retargeting");
-                        ActivateAttackRequestFallback(now, "progress-stalled");
-                        ClearSpoilPendingTarget(target.ObjectId);
-                        ResetCombatState();
-                        _lastAutoTargetObjectId = 0;
-                        SetCombatPhase("target-stalled-retarget");
-                        _nextFightActionAt = now.AddMilliseconds(260);
-                        return;
-                    }
-                }
-
-                // Out of cast range — cast a skill (server moves char to skill range + fires it).
-                // No ForceAttack: it drags the caster to melee range (~40 units) causing unnecessary movement.
-                if (Settings.UseCombatSkills && TryUseCombatRotation())
-                {
-                    SetCombatPhase("caster-chase");
-                }
-                else
-                {
-                    // All skills on cooldown — stand still and wait; do NOT send ForceAttack.
-                    SetCombatPhase("caster-chase-wait");
-                }
-                _nextFightActionAt = now.AddMilliseconds(Math.Max(400, Settings.CasterCastIntervalMs));
-                return;
-            }
-
-            // Reached cast range — reset chase timer
-            _casterChaseStartedAtUtc = DateTime.MinValue;
-        }
-
-
-        if (Settings.UseCombatSkills && TryUseCombatRotation())
-        {
-            SetCombatPhase("attack-rotation");
-            _nextFightActionAt = now.AddMilliseconds(420);
-            return;
-        }
-        if (strictCaster
-            && Settings.EnableCasterV2
-            && Settings.CasterFallbackToAttack
-            && now >= _nextForceAttackAt
-            && TrySendAttack(me, target.ObjectId, "caster-fallback-loop"))
-        {
-            SetCombatPhase("caster-fallback-attack");
-            _nextForceAttackAt = now.AddMilliseconds(980);
-            _nextFightActionAt = now.AddMilliseconds(Math.Max(320, Settings.CasterCastIntervalMs));
-            return;
-        }
-        if (strictCaster)
-        {
-            SetCombatPhase("strict-caster-wait");
-            SetDecision("strict-caster-wait-no-skill");
-            _nextFightActionAt = now.AddMilliseconds(Math.Max(260, Settings.CasterCastIntervalMs));
-            return;
-        }
-
-        var progressWindowMs = Math.Max(1600, Settings.AttackNoProgressWindowMs);
-        if (_combatLastProgressAtUtc != DateTime.MinValue && (now - _combatLastProgressAtUtc).TotalMilliseconds >= progressWindowMs)
-        {
-            var noRecentIncomingDamage = _lastIncomingDamageAtUtc == DateTime.MinValue
-                || (now - _lastIncomingDamageAtUtc).TotalMilliseconds >= 2400;
-            var noRecentOutgoingHit = target.LastHitByMeAtUtc == DateTime.MinValue
-                || (now - target.LastHitByMeAtUtc).TotalMilliseconds >= 2400;
-
-            if (noRecentIncomingDamage && noRecentOutgoingHit)
-            {
-                _combatNoProgressStrikes++;
-                SetCombatPhase("progress-guard");
-                _log.Info($"[AutoFight] no progress for {(now - _combatLastProgressAtUtc).TotalSeconds:0.0}s target=0x{target.ObjectId:X}; strike={_combatNoProgressStrikes}; forcing engage");
-
-                if (_combatNoProgressStrikes >= 3)
-                {
-                    var staleCount = _stallRetargetCountByTarget.GetValueOrDefault(target.ObjectId);
-                    var ignoreSeconds = staleCount >= 2 ? 35 : 15;
-                    _stallRetargetCountByTarget[target.ObjectId] = staleCount + 1;
-                    _temporarilyIgnoredTargets[target.ObjectId] = now.AddSeconds(ignoreSeconds);
-                    _log.Info($"[AutoFight] target-stalled oid=0x{target.ObjectId:X}; ignore={ignoreSeconds}s; retargeting");
-                    ActivateAttackRequestFallback(now, "progress-stalled");
-                    ClearSpoilPendingTarget(target.ObjectId);
-                    ResetCombatState();
-                    _lastAutoTargetObjectId = 0;
-                    SetCombatPhase("target-stalled-retarget");
-                    _nextFightActionAt = now.AddMilliseconds(260);
-                    return;
-                }
-
-                if (now >= _nextTargetActionAt)
-                {
-                    TryInject(PacketBuilder.BuildAction(target.ObjectId, me.X, me.Y, me.Z, 0), "progress-guard-target-action");
-                    _nextTargetActionAt = now.AddMilliseconds(900);
-                }
-
-                TrySendAttack(me, target.ObjectId, "progress-guard");
-                _combatLastProgressAtUtc = now;
-                _nextFightActionAt = now.AddMilliseconds(620);
-                return;
-            }
-
-            _combatLastProgressAtUtc = now;
-        }
-
-        if (now < _nextForceAttackAt)
-        {
-            _nextFightActionAt = now.AddMilliseconds(280);
-            return;
-        }
-
-        if (TrySendAttack(me, target.ObjectId, "attack-loop"))
-        {
-            SetCombatPhase("engage");
-            _nextForceAttackAt = now.AddMilliseconds(980);
-        }
-
-        _nextFightActionAt = now.AddMilliseconds(520);
-    }
-    private bool TryRunSpoilOpening(NpcState target, DateTime now, long targetDistSq, bool allowOutOfRangeFromCombatSignal)
-    {
-        if (Settings.Role != BotRole.Spoiler || !Settings.SpoilEnabled || Settings.SpoilSkillId <= 0)
-        {
-            return false;
-        }
-
-        if (now < _nextSpoilAt)
-        {
-            return false;
-        }
-
-        if (target.SpoilSucceeded)
-        {
-            return false;
-        }
-
-        var maxSpoilAttempts = Math.Max(1, Settings.CombatMode == CombatMode.HybridFsmPriority
-            ? Settings.SpoilMaxAttemptsPerTarget
-            : (Settings.SpoilOncePerTarget ? 1 : Settings.SpoilMaxAttemptsPerTarget));
-        if (_spoilAttemptCountByTarget.GetValueOrDefault(target.ObjectId) >= maxSpoilAttempts)
-        {
-            return false;
-        }
-
-        if (_spoilPendingTargetObjectId == target.ObjectId && now < _spoilPendingUntilUtc)
-        {
-            return false;
-        }
-
-        var spoilRetryMs = Math.Max(1100, Settings.CombatSkillCooldownMs);
-        var spoilRetryTimeoutMs = maxSpoilAttempts <= 1
-            ? Math.Max(15000, Settings.AttackNoProgressWindowMs + 6000)
-            : Math.Max(Math.Max(spoilRetryMs * 2, Settings.AttackNoProgressWindowMs), 7000);
-
-        if (_spoilAttemptLocalByTarget.TryGetValue(target.ObjectId, out var localAttemptAt)
-            && (now - localAttemptAt).TotalMilliseconds < spoilRetryTimeoutMs)
-        {
-            return false;
-        }
-
-        if (target.SpoilAttempted && target.SpoilAtUtc != DateTime.MinValue)
-        {
-            var elapsed = (now - target.SpoilAtUtc).TotalMilliseconds;
-            if (maxSpoilAttempts <= 1)
-            {
-                if (elapsed < spoilRetryTimeoutMs)
-                {
-                    return false;
-                }
-            }
-            else if (elapsed < spoilRetryMs)
-            {
-                return false;
-            }
-        }
-
-        var spoilCastRange = Math.Max(80, Settings.MeleeEngageRange + 40);
-        var spoilCastRangeSq = (long)spoilCastRange * spoilCastRange;
-        if (targetDistSq > spoilCastRangeSq && !allowOutOfRangeFromCombatSignal)
-        {
-            var spoilChaseRange = Math.Max(spoilCastRange + 240, Settings.MeleeEngageRange + 320);
-            var spoilChaseRangeSq = (long)spoilChaseRange * spoilChaseRange;
-            if (!Settings.MoveToTarget || targetDistSq > spoilChaseRangeSq)
-            {
-                return false;
-            }
-        }
-
-        if (!TryCastSkill(Settings.SpoilSkillId, forBuff: false, cooldownOverrideMs: spoilRetryMs, allowReservedSkill: true))
-        {
-            return false;
-        }
-
-        var retryWindowMs = Math.Max(500, Settings.PostKillSweepRetryWindowMs);
-        _world.WithLock(() =>
-        {
-            if (_world.Npcs.TryGetValue(target.ObjectId, out var tracked))
-            {
-                tracked.SpoilAttempted = true;
-                tracked.SpoilAtUtc = now;
-                tracked.SweepDone = false;
-                tracked.SweepRetryUntilUtc = now.AddMilliseconds(retryWindowMs);
-                _world.Npcs[target.ObjectId] = tracked;
-            }
-        });
-
-        _spoilAttemptLocalByTarget[target.ObjectId] = now;
-        _spoilAttemptCountByTarget[target.ObjectId] = _spoilAttemptCountByTarget.GetValueOrDefault(target.ObjectId) + 1;
-        var pruneBefore = now.AddMinutes(-2);
-        foreach (var kv in _spoilAttemptLocalByTarget.Where(x => x.Value < pruneBefore).ToArray())
-        {
-            _spoilAttemptLocalByTarget.Remove(kv.Key);
-        }
-
-        SetSpoilPendingTarget(target.ObjectId, now);
-
-        SetCombatPhase("opening-spoil");
-        _nextSpoilAt = now.AddMilliseconds(Math.Max(1400, Settings.CombatSkillCooldownMs));
-        _nextForceAttackAt = now.AddMilliseconds(320);
-        _nextFightActionAt = now.AddMilliseconds(160);
-        return true;
-    }
-    private bool HandleDeadTarget(NpcState target, DateTime now)
-    {
-        BeginPostKill(target, now, "dead-target");
-        return true;
     }
 
-    private void UpdateCombatTargetSnapshot(NpcState target, DateTime now)
+    private bool AllowRecoverySit()
     {
-        _combatTargetLastSeenAtUtc = now;
-        _combatTargetLastX = target.X;
-        _combatTargetLastY = target.Y;
-        _combatTargetLastZ = target.Z;
-        _combatTargetNpcTypeId = target.NpcTypeId;
-        _combatTargetSpoilSucceeded = ResolveSpoilSucceeded(target, now);
-
-        if (target.LastHitByMeAtUtc != DateTime.MinValue)
-        {
-            _combatTargetLastHitByMeAtUtc = target.LastHitByMeAtUtc;
-        }
-
-        if (HasCombatEvidence(target, now))
-        {
-            _combatTargetHadCombatSignal = true;
-        }
-    }
-    private bool ResolveSpoilSucceeded(NpcState target, DateTime now)
-    {
-        if (target.SpoilSucceeded)
-        {
-            return true;
-        }
-
-        if (target.AbnormalEffectSkillIds.Count > 0 && target.AbnormalEffectSkillIds.Overlaps(new HashSet<int> { Settings.SpoilSkillId, 254, 302 }))
-        {
-            return true;
-        }
-
-        if (target.SpoilAttempted
-            && target.SpoilAtUtc != DateTime.MinValue
-            && (now - target.SpoilAtUtc).TotalSeconds <= 10)
-        {
-            return true;
-        }
-
-        if (_spoilAttemptLocalByTarget.TryGetValue(target.ObjectId, out var localAttemptAt)
-            && (now - localAttemptAt).TotalSeconds <= 10)
-        {
-            return true;
-        }
-
-        return false;
-    }
-    private void BeginPostKill(NpcState target, DateTime now, string reason)
-    {
-        _postKillTargetObjectId = target.ObjectId;
-        _postKillNpcTypeId = target.NpcTypeId;
-        _postKillX = target.X;
-        _postKillY = target.Y;
-        _postKillZ = target.Z;
-        _postKillSpoilSucceeded = Settings.Role == BotRole.Spoiler && ResolveSpoilSucceeded(target, now);
-        BeginPostKillCore(now, reason);
-    }
-
-    private void BeginPostKillFromSnapshot(DateTime now, string reason)
-    {
-        if (_combatTargetObjectId == 0)
-        {
-            return;
-        }
-
-        _postKillTargetObjectId = _combatTargetObjectId;
-        _postKillNpcTypeId = _combatTargetNpcTypeId;
-        _postKillX = _combatTargetLastX;
-        _postKillY = _combatTargetLastY;
-        _postKillZ = _combatTargetLastZ;
-        _postKillSpoilSucceeded = Settings.Role == BotRole.Spoiler && _combatTargetSpoilSucceeded;
-        BeginPostKillCore(now, reason);
-    }
-
-    private void BeginPostKillCore(DateTime now, string reason)
-    {
-        if (_postKillActive
-            && _postKillTargetObjectId != 0
-            && (now - _postKillStartedAtUtc).TotalMilliseconds < 7000)
-        {
-            return;
-        }
-        if (_postKillTargetObjectId != 0
-            && _recentPostKillByTarget.TryGetValue(_postKillTargetObjectId, out var recentAt)
-            && (now - recentAt).TotalMilliseconds < 4500)
-        {
-            return;
-        }
-
-        _postKillActive = true;
-        _postKillStartedAtUtc = now;
-        _postKillSweepUntilUtc = now.AddMilliseconds(Math.Max(800, Settings.PostKillSweepRetryWindowMs));
-        var spawnWaitMs = Math.Max(0, Settings.PostKillSpawnWaitMs);
-        if (Settings.CombatMode == CombatMode.HybridFsmPriority)
-        {
-            spawnWaitMs = Math.Max(spawnWaitMs, 220);
-        }
-
-        _postKillSpawnWaitUntilUtc = now.AddMilliseconds(spawnWaitMs);
-        _postKillMinWaitForLootUntilUtc = now.AddMilliseconds(Math.Max(900, spawnWaitMs + 900));
-        _nextPostKillActionAt = now;
-        _postKillLootActions = 0;
-        _postKillEmptyPolls = 0;
-        _postKillItemsSeen = 0;
-        _postKillItemsPicked = 0;
-        _postKillItemsSkipped = 0;
-        _postKillTargetCanceled = false;
-        _postKillSweepAttempts = 0;
-        _postKillMoveToCorpseAttempts = 0;
-        _postKillReachedCorpseZone = false;
-        var me = _world.Me;
-        var pickupRange = Math.Max(70, Settings.LootPickupRange);
-        var pickupRangeSq = (long)pickupRange * pickupRange;
-        if (DistanceSq(me.X, me.Y, _postKillX, _postKillY) <= pickupRangeSq)
-        {
-            _postKillReachedCorpseZone = true;
-        }
-        _postKillLootItemAttempts.Clear();
-        _postKillSeenItemIds.Clear();
-        _spoilAttemptCountByTarget.Clear();
-
-        if (_postKillTargetObjectId != 0)
-        {
-            ClearSpoilPendingTarget(_postKillTargetObjectId);
-            _stallRetargetCountByTarget.Remove(_postKillTargetObjectId);
-            _log.Info($"[AutoFight] post-kill start oid=0x{_postKillTargetObjectId:X} reason={reason} spoil={_postKillSpoilSucceeded}");
-        }
-        else
-        {
-            ClearSpoilPendingTarget();
-        }
-
-        ResetCombatState();
-        _lastAutoTargetObjectId = 0;
-        SetCombatPhase("post-kill-start");
-        SetDecision($"post-kill-start:{reason}");
-    }
-    private bool RunPostKillSweepAndLoot(CharacterState me, DateTime now)
-    {
-        if (!_postKillActive)
-        {
-            return false;
-        }
-
-        var postKillTimeboxMs = 6200;
-        if (Settings.MoveToLoot)
-        {
-            var distToKill = Math.Sqrt(DistanceSq(me.X, me.Y, _postKillX, _postKillY));
-            var travelBudgetMs = (int)Math.Min(7000, distToKill * 9.0);
-            postKillTimeboxMs = Math.Min(14500, postKillTimeboxMs + travelBudgetMs);
-        }
-
-        if ((now - _postKillStartedAtUtc).TotalMilliseconds >= postKillTimeboxMs)
-        {
-            EndPostKill("post-kill-timebox");
-            return false;
-        }
-
-        if (HasRecentIncomingDamage(now, 900) && _postKillLootActions > 0)
-        {
-            var lowHpUnderPressure = me.MaxHp > 0 && me.HpPct <= Math.Max(24, Settings.HealHpThreshold - 8);
-            if (lowHpUnderPressure)
-            {
-                EndPostKill("post-kill-under-attack");
-                return false;
-            }
-        }
-
-        if (now < _nextPostKillActionAt)
-        {
-            return true;
-        }
-
-        var maxSweepAttempts = Math.Max(1, Settings.SweepAttemptsPostKill);
-        var canSweepSpoilCorpse = Settings.Role == BotRole.Spoiler;
-        if (canSweepSpoilCorpse && Settings.PostKillSweepEnabled
-            && Settings.SweepEnabled
-            && Settings.SweepSkillId > 0
-            && _postKillSpoilSucceeded
-            && _postKillSweepAttempts < maxSweepAttempts
-            && now <= _postKillSweepUntilUtc && (_postKillTargetObjectId == 0 || _world.Npcs.ContainsKey(_postKillTargetObjectId)))
-        {
-            var sweepRetryMs = Math.Max(120, Settings.PostKillSweepRetryIntervalMs);
-            if (now >= _nextSweepAt)
-            {
-                if (TryCastSkill(Settings.SweepSkillId, forBuff: false, cooldownOverrideMs: sweepRetryMs, allowReservedSkill: true))
-                {
-                    _postKillSweepAttempts++;
-                }
-
-                _nextSweepAt = now.AddMilliseconds(sweepRetryMs);
-                SetCombatPhase("post-kill-sweep");
-            }
-
-            _nextPostKillActionAt = now.AddMilliseconds(140);
-            return true;
-        }
-
-        if (now < _postKillSpawnWaitUntilUtc)
-        {
-            SetCombatPhase("post-kill-wait-drop");
-            _nextPostKillActionAt = _postKillSpawnWaitUntilUtc;
-            return true;
-        }
-
-        if (!_postKillTargetCanceled)
-        {
-            TryInject(PacketBuilder.BuildTargetCancel(), "post-kill-cancel-target");
-            _postKillTargetCanceled = true;
-            _nextPostKillActionAt = now.AddMilliseconds(100);
-            return true;
-        }
-
-        if (TryRunPostKillLootBurst(me, now))
-        {
-            EndPostKill("loot-complete");
-            return false;
-        }
-
-        return true;
-    }
-    private bool TryRunPostKillLootBurst(CharacterState me, DateTime now)
-    {
-        var maxAttempts = Math.Max(1, Settings.PostKillLootMaxAttempts);
-        if (Settings.CombatMode == CombatMode.HybridFsmPriority)
-        {
-            maxAttempts = Math.Max(maxAttempts, 14);
-        }
-
-        if (Settings.MoveToLoot)
-        {
-            var farCorpseRange = Math.Max(160, Settings.LootPickupRange + 90);
-            var farCorpseRangeSq = (long)farCorpseRange * farCorpseRange;
-            var distToCorpseSq = DistanceSq(me.X, me.Y, _postKillX, _postKillY);
-            if (distToCorpseSq > farCorpseRangeSq)
-            {
-                maxAttempts += 6;
-            }
-        }
-
-        if (_postKillLootActions >= maxAttempts)
-        {
-            var hardAttempts = maxAttempts + (Settings.BattleMode == BotBattleMode.StrictCaster ? 10 : 8);
-            var shouldExtend = _postKillItemsSeen > _postKillItemsPicked
-                && _postKillLootActions < hardAttempts;
-            if (shouldExtend)
-            {
-                _nextPostKillActionAt = now.AddMilliseconds(180);
-                return false;
-            }
-
-            return true;
-        }
-
-        if (!TryGetPostKillLootItem(me, out var item, out var distFromMeSq))
-        {
-            var corpsePickupRange = Math.Max(70, Settings.LootPickupRange);
-            var corpsePickupRangeSq = (long)corpsePickupRange * corpsePickupRange;
-            var maxMoveToLoot = Settings.BattleMode == BotBattleMode.StrictCaster
-                ? Math.Max(1600, Math.Max(Settings.LootRange, corpsePickupRange) + 620)
-                : Math.Max(700, Math.Max(Settings.LootRange, corpsePickupRange) + 320);
-            var maxMoveToLootSq = (long)maxMoveToLoot * maxMoveToLoot;
-            var distToKillSq = DistanceSq(me.X, me.Y, _postKillX, _postKillY);
-
-            if (distToKillSq <= corpsePickupRangeSq)
-            {
-                _postKillReachedCorpseZone = true;
-            }
-
-            if (Settings.MoveToLoot
-                && distToKillSq > corpsePickupRangeSq
-                && distToKillSq <= maxMoveToLootSq
-                && TryMoveTo(_postKillX, _postKillY, _postKillZ))
-            {
-                _postKillMoveToCorpseAttempts++;
-                // Movement doesn't burn pickup attempts — only actual pickups/polls at corpse count
-                SetCombatPhase("post-kill-move-to-corpse");
-                _nextPostKillActionAt = now.AddMilliseconds(Settings.BattleMode == BotBattleMode.StrictCaster ? 300 : 240);
-                return false;
-            }
-
-            _postKillEmptyPolls++;
-            // Empty polls only count toward maxAttempts once we've reached the corpse zone
-            if (_postKillReachedCorpseZone)
-            {
-                _postKillLootActions++;
-            }
-            SetCombatPhase("post-kill-loot-poll");
-            // At corpse zone: poll faster (80ms) and stop sooner (3 empty polls = ~240ms)
-            _nextPostKillActionAt = now.AddMilliseconds(_postKillReachedCorpseZone ? 80 : 180);
-
-            var emptyPollLimit = _postKillReachedCorpseZone ? 3 : (Settings.BattleMode == BotBattleMode.StrictCaster ? 10 : 5);
-            var hadCorpseAttempt = _postKillReachedCorpseZone || _postKillMoveToCorpseAttempts > 0 || !Settings.MoveToLoot;
-            var hasSeenButNotResolved = _postKillItemsSeen > 0 && _postKillItemsPicked == 0;
-            if (hasSeenButNotResolved)
-            {
-                return false;
-            }
-
-            return _postKillEmptyPolls >= emptyPollLimit && hadCorpseAttempt && now >= _postKillMinWaitForLootUntilUtc;
-        }
-
-        _postKillEmptyPolls = 0;
-        if (_postKillSeenItemIds.Add(item.ObjectId))
-        {
-            _postKillItemsSeen++;
-        }
-
-        var perItemRetry = Math.Max(1, Settings.PostKillLootItemRetry);
-        if (Settings.CombatMode == CombatMode.HybridFsmPriority)
-        {
-            perItemRetry = Math.Max(perItemRetry, 3);
-        }
-
-        var usedAttempts = _postKillLootItemAttempts.GetValueOrDefault(item.ObjectId);
-        if (usedAttempts >= perItemRetry)
-        {
-            _postKillItemsSkipped++;
-            _postKillLootActions++;
-            _nextPostKillActionAt = now.AddMilliseconds(120);
-            return false;
-        }
-
-        var pickupRangeNear = Math.Max(70, Settings.LootPickupRange);
-        var pickupRangeNearSq = (long)pickupRangeNear * pickupRangeNear;
-
-        if (distFromMeSq > pickupRangeNearSq)
-        {
-            // For caster: don't chase scattered loot — stand still, TickAutoLoot picks up the rest.
-            // For melee: move up to a short radius (pickupRange + 200) so we collect loot nearby.
-            var maxMoveToLoot = Settings.BattleMode == BotBattleMode.StrictCaster
-                ? Math.Max(300, pickupRangeNear + 150)  // caster: short hop only, don't chase far scattered items
-                : Math.Max(400, pickupRangeNear + 200);
-            var maxMoveToLootSq = (long)maxMoveToLoot * maxMoveToLoot;
-            if (distFromMeSq <= maxMoveToLootSq && Settings.MoveToLoot && TryMoveTo(item.X, item.Y, item.Z))
-            {
-                SetCombatPhase("post-kill-move-to-loot");
-                _nextPostKillActionAt = now.AddMilliseconds(220);
-                return false;
-            }
-
-            _postKillLootItemAttempts[item.ObjectId] = perItemRetry;
-            _postKillItemsSkipped++;
-            _postKillLootActions++;
-            SetCombatPhase("post-kill-skip-far-loot");
-            _nextPostKillActionAt = now.AddMilliseconds(180);
-            return false;
-        }
-
-        _postKillLootItemAttempts[item.ObjectId] = usedAttempts + 1;
-        _postKillItemsPicked++;
-        _postKillLootActions++;
-
-        if (!TryInject(PacketBuilder.BuildAction(item.ObjectId, me.X, me.Y, me.Z, 0), "post-kill-loot-pickup-action"))
-        {
-            TryInject(PacketBuilder.BuildGetItem(item.X, item.Y, item.Z, item.ObjectId), "post-kill-loot-pickup-48");
-        }
-
-        SetCombatPhase("post-kill-loot");
-        _nextPostKillActionAt = now.AddMilliseconds(_postKillReachedCorpseZone ? 80 : 180);
-        return false;
-    }
-    private bool TryGetPostKillLootItem(CharacterState me, out GroundItemState item, out long distFromMeSq)
-    {
-        item = null!;
-        distFromMeSq = 0;
-
-        var perItemRetry = Math.Max(1, Settings.PostKillLootItemRetry);
-        if (Settings.CombatMode == CombatMode.HybridFsmPriority)
-        {
-            perItemRetry = Math.Max(perItemRetry, 3);
-        }
-        var corpsePickupRange = Math.Max(70, Settings.LootPickupRange);
-        var maxMoveToLoot = Settings.BattleMode == BotBattleMode.StrictCaster
-                ? Math.Max(300, corpsePickupRange + 150)  // caster: short hop only
-                : Math.Max(400, corpsePickupRange + 200);
-        var maxMoveToLootSq = (long)maxMoveToLoot * maxMoveToLoot;
-        var baseRange = Math.Max(Math.Max(Settings.LootRange, Settings.LootPickupRange), 450);
-        var killRange = baseRange + (Settings.BattleMode == BotBattleMode.StrictCaster ? 460 : 220);
-        var killRangeSq = (long)killRange * killRange;
-
-        GroundItemState? best = null;
-        var bestDistFromMe = long.MaxValue;
-        var bestScore = long.MaxValue;
-
-        foreach (var cur in _world.Items.Values)
-        {
-            if (_postKillLootItemAttempts.GetValueOrDefault(cur.ObjectId) >= perItemRetry)
-            {
-                continue;
-            }
-
-            var distKillSq = DistanceSq(_postKillX, _postKillY, cur.X, cur.Y);
-            var distMeSq = DistanceSq(me.X, me.Y, cur.X, cur.Y);
-            if (distKillSq > killRangeSq)
-            {
-                continue;
-            }
-
-            if (distMeSq > maxMoveToLootSq)
-            {
-                continue;
-            }
-
-            var herbBoost = IsLikelyHerbItemId(cur.ItemId) ? -220L : 0L;
-            var score = distMeSq + distKillSq / 2 + herbBoost;
-            if (score < bestScore)
-            {
-                best = cur;
-                bestScore = score;
-                bestDistFromMe = distMeSq;
-            }
-        }
-
-        if (best is null)
-        {
-            return false;
-        }
-
-        item = best;
-        distFromMeSq = bestDistFromMe;
-        return true;
-    }
-
-    private void EndPostKill(string reason)
-    {
-        if (_postKillTargetObjectId != 0)
-        {
-            _recentPostKillByTarget[_postKillTargetObjectId] = DateTime.UtcNow;
-            _spoilAttemptLocalByTarget.Remove(_postKillTargetObjectId);
-            _spoilAttemptCountByTarget.Remove(_postKillTargetObjectId);
-            _stallRetargetCountByTarget.Remove(_postKillTargetObjectId);
-        }
-
-        var pruneBefore = DateTime.UtcNow.AddSeconds(-20);
-        foreach (var kv in _recentPostKillByTarget.Where(x => x.Value < pruneBefore).ToArray())
-        {
-            _recentPostKillByTarget.Remove(kv.Key);
-        }
-
-        var spoilPruneBefore = DateTime.UtcNow.AddMinutes(-2);
-        foreach (var kv in _spoilAttemptLocalByTarget.Where(x => x.Value < spoilPruneBefore).ToArray())
-        {
-            _spoilAttemptLocalByTarget.Remove(kv.Key);
-        }
-
-        _log.Info($"[AutoFight] post-kill summary oid=0x{_postKillTargetObjectId:X} reason={reason} seen={_postKillItemsSeen} picked={_postKillItemsPicked} skipped={_postKillItemsSkipped} polls={_postKillEmptyPolls} actions={_postKillLootActions}");
-        SetDecision($"post-kill:{reason}");
-        SetCombatPhase("post-kill-complete");
-        ResetPostKillState();
-    }
-    private void ObserveCombatProgress(NpcState target, DateTime now)
-    {
-        var progressed = false;
-
-        if (_combatTargetLastHpPct >= 0 && target.HpPct >= 0 && target.HpPct + 0.05f < _combatTargetLastHpPct)
-        {
-            progressed = true;
-        }
-
-        if (target.LastHitByMeAtUtc != DateTime.MinValue && (_combatLastProgressAtUtc == DateTime.MinValue || target.LastHitByMeAtUtc > _combatLastProgressAtUtc))
-        {
-            progressed = true;
-        }
-
         if (_lastIncomingDamageAtUtc != DateTime.MinValue
-            && (_combatLastProgressAtUtc == DateTime.MinValue || _lastIncomingDamageAtUtc > _combatLastProgressAtUtc))
-        {
-            progressed = true;
-        }
-
-        if (target.IsDead || target.HpPct <= 0.01f)
-        {
-            if (_spoilPendingTargetObjectId == target.ObjectId)
-            {
-                ClearSpoilPendingTarget(target.ObjectId);
-            }
-            progressed = true;
-        }
-
-        if (progressed || _combatLastProgressAtUtc == DateTime.MinValue)
-        {
-            _combatLastProgressAtUtc = now;
-            _combatNoProgressStrikes = 0;
-            // _killTimeoutFireCount is intentionally NOT reset here — it should only
-            // reset when a new target is assigned (ResetCombatState), not on any combat progress.
-            // Otherwise hard-abandon never fires on invincible/unkillable mobs.
-        }
-
-        _combatTargetLastHpPct = target.HpPct;
-    }
-
-    private void TrackIncomingDamage(CharacterState me, DateTime now)
-    {
-        var curHp = me.CurHp;
-        if (curHp <= 0)
-        {
-            _lastObservedSelfHp = -1;
-            return;
-        }
-
-        if (_lastObservedSelfHp > 0 && curHp < _lastObservedSelfHp)
-        {
-            _lastIncomingDamageAtUtc = now;
-        }
-
-        _lastObservedSelfHp = curHp;
-    }
-
-    private bool TrySendAttack(CharacterState me, int targetObjectId, string actionPrefix)
-    {
-        if (targetObjectId == 0)
-        {
+            && (DateTime.UtcNow - _lastIncomingDamageAtUtc).TotalMilliseconds < Settings.IncomingDamageSitBlockMs)
             return false;
-        }
 
-        var (tx, ty, tz) = ResolveTargetPosition(me, targetObjectId);
-        var now = DateTime.UtcNow;
-
-        if (Settings.AttackPipelineMode == AttackPipelineMode.LegacyAttackRequest)
-        {
-            if (TryInject(PacketBuilder.BuildAttackRequest(targetObjectId, tx, ty, tz, shift: (byte)(Settings.UseForceAttack ? 1 : 0)), $"{actionPrefix}-0a"))
-            {
-                _assumedTargetObjectId = targetObjectId;
-                _assumedTargetUntilUtc = now.AddMilliseconds(2600);
-                return true;
-            }
-
-            if (TryInject(PacketBuilder.BuildForceAttack(targetObjectId, tx, ty, tz), $"{actionPrefix}-2f16"))
-            {
-                _assumedTargetObjectId = targetObjectId;
-                _assumedTargetUntilUtc = now.AddMilliseconds(2600);
-                return true;
-            }
-
+        var tid = _world.Me.TargetId;
+        if (tid != 0 && _world.Npcs.TryGetValue(tid, out var npc) && npc.IsAttackable && !npc.IsDead)
             return false;
-        }
 
-        var sent = false;
-        var preferAttackRequest = Settings.AttackTransportMode == AttackTransportMode.AutoPrimary04Plus2F && now < _preferAttackRequestUntilUtc;
-        var assumedActive = _assumedTargetObjectId == targetObjectId && now <= _assumedTargetUntilUtc;
-
-        if (!preferAttackRequest)
-        {
-            if (me.TargetId != targetObjectId && !assumedActive && now >= _nextTargetActionAt)
-            {
-                if (TryInject(PacketBuilder.BuildAction(targetObjectId, me.X, me.Y, me.Z, 0), $"{actionPrefix}-04"))
-                {
-                    sent = true;
-                    _assumedTargetObjectId = targetObjectId;
-                    _assumedTargetUntilUtc = now.AddMilliseconds(3000);
-                    _nextTargetActionAt = now.AddMilliseconds(820);
-                }
-            }
-
-            if (TryInject(PacketBuilder.BuildForceAttack(targetObjectId, tx, ty, tz), $"{actionPrefix}-2f16"))
-            {
-                sent = true;
-                _assumedTargetObjectId = targetObjectId;
-                _assumedTargetUntilUtc = now.AddMilliseconds(2600);
-                if (_nextTargetActionAt < now.AddMilliseconds(620))
-                {
-                    _nextTargetActionAt = now.AddMilliseconds(620);
-                }
-            }
-        }
-
-        if (preferAttackRequest || Settings.UseAttackRequestFallback || Settings.PreferAttackRequest)
-        {
-            if (now >= _nextCompatAttackRequestAt
-                && TryInject(PacketBuilder.BuildAttackRequest(targetObjectId, tx, ty, tz, shift: (byte)(Settings.UseForceAttack ? 1 : 0)), $"{actionPrefix}-0a-compat"))
-            {
-                sent = true;
-                _nextCompatAttackRequestAt = now.AddMilliseconds(preferAttackRequest ? 650 : 900);
-                _assumedTargetObjectId = targetObjectId;
-                _assumedTargetUntilUtc = now.AddMilliseconds(2600);
-            }
-        }
-
-        return sent;
-    }
-
-    private void ActivateAttackRequestFallback(DateTime now, string reason)
-    {
-        if (Settings.AttackTransportMode != AttackTransportMode.AutoPrimary04Plus2F)
-        {
-            return;
-        }
-
-        if (now < _nextTransportSwitchAtUtc)
-        {
-            return;
-        }
-
-        _preferAttackRequestUntilUtc = now.AddMilliseconds(6500);
-        _nextTransportSwitchAtUtc = now.AddMilliseconds(8000);
-        _log.Info($"[AutoFight] transport-fallback => 0x0A reason={reason} until={_preferAttackRequestUntilUtc:HH:mm:ss.fff}");
-    }
-    private (int x, int y, int z) ResolveTargetPosition(CharacterState me, int targetObjectId)
-    {
-        if (_world.Npcs.TryGetValue(targetObjectId, out var npc))
-        {
-            return (npc.X, npc.Y, npc.Z);
-        }
-
-        return (me.X, me.Y, me.Z);
-    }
-
-    private static bool IsLikelyMobByNpcId(int npcId)
-        => npcId is >= 20400 and < 30000;
-
-    private static bool IsLikelyHerbItemId(int itemId)
-        => itemId is >= 8600 and <= 8625;
-
-    private static bool IsNonCombatServiceName(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        var v = text.ToLowerInvariant();
-        return v.Contains("gatekeeper", StringComparison.Ordinal)
-            || v.Contains("warehouse", StringComparison.Ordinal)
-            || v.Contains("trader", StringComparison.Ordinal)
-            || v.Contains("blacksmith", StringComparison.Ordinal)
-            || v.Contains("grocery", StringComparison.Ordinal)
-            || v.Contains("fisher", StringComparison.Ordinal)
-            || v.Contains("teleporter", StringComparison.Ordinal)
-            || v.Contains("pet manager", StringComparison.Ordinal)
-            || v.Contains("buffer", StringComparison.Ordinal)
-            || v.Contains("manager", StringComparison.Ordinal)
-            || v.Contains("supplier", StringComparison.Ordinal);
-    }
-
-    private static bool HasCombatEvidence(NpcState npc, DateTime now)
-    {
-        if (npc.IsDead)
-        {
-            return true;
-        }
-
-        if (npc.HpPct is > 0 and < 99.9f)
-        {
-            return true;
-        }
-
-        if (npc.LastHitByMeAtUtc != DateTime.MinValue && (now - npc.LastHitByMeAtUtc).TotalSeconds <= 60)
-        {
-            return true;
-        }
-
-        if (npc.LastAggroHitAtUtc != DateTime.MinValue && (now - npc.LastAggroHitAtUtc).TotalSeconds <= 25)
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    private bool HasRecentIncomingDamage(DateTime now, int windowMs)
-    {
-        if (_lastIncomingDamageAtUtc == DateTime.MinValue)
-        {
-            return false;
-        }
-
-        var window = Math.Max(200, windowMs);
-        return (now - _lastIncomingDamageAtUtc).TotalMilliseconds <= window;
-    }
-
-    private int CountFreshAggroAttackers(CharacterState me, DateTime now)
-    {
-        var range = Math.Max(900, Settings.FightRange);
-        var rangeSq = (long)range * range;
-        var targetZ = Math.Max(0, Settings.TargetZRangeMax);
-        var count = 0;
-
-        foreach (var npc in _world.Npcs.Values)
-        {
-            if (!npc.IsAttackable || npc.IsDead)
-            {
-                continue;
-            }
-
-            if (npc.LastAggroHitAtUtc == DateTime.MinValue || (now - npc.LastAggroHitAtUtc).TotalMilliseconds > 2600)
-            {
-                continue;
-            }
-
-            if (targetZ > 0 && Math.Abs(npc.Z - me.Z) > targetZ)
-            {
-                continue;
-            }
-
-            if (DistanceSq(me.X, me.Y, npc.X, npc.Y) > rangeSq)
-            {
-                continue;
-            }
-
-            count++;
-        }
-
-        return count;
-    }
-
-    private NpcState? SelectEmergencyAggroTarget(CharacterState me, DateTime now)
-    {
-        var fightRange = Math.Max(900, Settings.FightRange);
-        var emergencyRange = Math.Max(fightRange, Settings.RetainCurrentTargetMaxDist + 500);
-        var emergencyRangeSq = (long)emergencyRange * emergencyRange;
-        var targetZ = Math.Max(0, Settings.TargetZRangeMax);
-
-        NpcState? best = null;
-        var bestDistSq = long.MaxValue;
-        var bestAggroAgeMs = double.MaxValue;
-
-        foreach (var npc in _world.Npcs.Values)
-        {
-            if (!npc.IsAttackable || npc.IsDead)
-            {
-                continue;
-            }
-
-            if (Settings.SkipSummonedNpcs && npc.IsSummoned)
-            {
-                continue;
-            }
-
-            if (targetZ > 0 && Math.Abs(npc.Z - me.Z) > targetZ)
-            {
-                continue;
-            }
-
-            var aggroAgeMs = npc.LastAggroHitAtUtc == DateTime.MinValue
-                ? double.MaxValue
-                : (now - npc.LastAggroHitAtUtc).TotalMilliseconds;
-            if (aggroAgeMs > 4200)
-            {
-                continue;
-            }
-
-            var distSq = DistanceSq(me.X, me.Y, npc.X, npc.Y);
-            if (distSq > emergencyRangeSq)
-            {
-                continue;
-            }
-
-            if (aggroAgeMs < bestAggroAgeMs || (Math.Abs(aggroAgeMs - bestAggroAgeMs) < 1 && distSq < bestDistSq))
-            {
-                best = npc;
-                bestAggroAgeMs = aggroAgeMs;
-                bestDistSq = distSq;
-            }
-        }
-
-        return best;
-    }
-    private void EnsureHuntCenterAnchor(CharacterState me)
-    {
-        if (Settings.HuntCenterMode != HuntCenterMode.Anchor)
-        {
-            return;
-        }
-
-        if (Settings.AnchorX != 0 || Settings.AnchorY != 0 || Settings.AnchorZ != 0)
-        {
-            return;
-        }
-
-        if (me.ObjectId == 0)
-        {
-            return;
-        }
-
-        Settings.AnchorX = me.X;
-        Settings.AnchorY = me.Y;
-        Settings.AnchorZ = me.Z;
-        _log.Info($"[AutoFight] hunt anchor set to ({Settings.AnchorX},{Settings.AnchorY},{Settings.AnchorZ})");
-    }
-
-    private (int x, int y, int z) GetHuntCenter(CharacterState me)
-    {
-        if (Settings.HuntCenterMode != HuntCenterMode.Anchor)
-        {
-            return (me.X, me.Y, me.Z);
-        }
-
-        return (Settings.AnchorX, Settings.AnchorY, Settings.AnchorZ);
-    }
-    private NpcState? SelectFightTarget(CharacterState me, int centerX, int centerY, int centerZ)
-    {
+        var aggroCutoff = DateTime.UtcNow.AddMilliseconds(-Settings.IncomingDamageSitBlockMs);
         var fightRangeSq = (long)Settings.FightRange * Settings.FightRange;
-        var retain = Math.Max(0, Settings.RetainCurrentTargetMaxDist);
-        var retainRangeSq = (long)retain * retain;
-        var targetZ = Math.Max(0, Settings.TargetZRangeMax);
-
-        var whitelist = Settings.NpcWhitelistIds;
-        var blacklist = Settings.NpcBlacklistIds;
-        var whitelistOn = Settings.AttackOnlyWhitelistMobs && whitelist.Count > 0;
-        var now = DateTime.UtcNow;
-
-        foreach (var kv in _temporarilyIgnoredTargets.Where(x => x.Value <= now).ToArray())
+        foreach (var n in _world.Npcs.Values)
         {
-            _temporarilyIgnoredTargets.Remove(kv.Key);
+            if (n.IsAttackable && !n.IsDead
+                && n.LastAggroHitAtUtc >= aggroCutoff
+                && CombatService.DistanceSq(_world.Me.X, _world.Me.Y, n.X, n.Y) <= fightRangeSq)
+                return false;
         }
 
-        bool IsCandidate(NpcState npc, long distSq)
-        {
-            if (!npc.IsAttackable || npc.IsDead)
-            {
-                return false;
-            }
-
-            if (_temporarilyIgnoredTargets.TryGetValue(npc.ObjectId, out var ignoreUntil) && now < ignoreUntil)
-            {
-                return false;
-            }
-
-            if (Settings.SkipSummonedNpcs && npc.IsSummoned)
-            {
-                return false;
-            }
-
-            if (targetZ > 0 && Math.Abs(npc.Z - centerZ) > targetZ)
-            {
-                return false;
-            }
-
-            if (distSq > fightRangeSq)
-            {
-                return false;
-            }
-
-            var npcId = npc.NpcTypeId > 1_000_000 ? npc.NpcTypeId - 1_000_000 : npc.NpcTypeId;
-            if (blacklist.Contains(npcId))
-            {
-                return false;
-            }
-
-            if (whitelistOn && !whitelist.Contains(npcId))
-            {
-                return false;
-            }
-
-            var whitelisted = whitelist.Contains(npcId);
-            if (!whitelisted)
-            {
-                var isRecentAggro = npc.LastAggroHitAtUtc != DateTime.MinValue
-                    && (now - npc.LastAggroHitAtUtc).TotalSeconds <= AggroRecentWindowSec;
-                if (!isRecentAggro && (IsNonCombatServiceName(npc.Name) || IsNonCombatServiceName(npc.Title)))
-                {
-                    return false;
-                }
-
-                var likelyMobId = IsLikelyMobByNpcId(npcId);
-                if (!likelyMobId && !isRecentAggro)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        var retainOid = me.TargetId != 0 ? me.TargetId : _lastAutoTargetObjectId;
-        if (retainOid != 0 && retainRangeSq > 0 && _world.Npcs.TryGetValue(retainOid, out var retained))
-        {
-            var retainedDistSq = DistanceSq(centerX, centerY, retained.X, retained.Y);
-            if (retainedDistSq <= retainRangeSq && IsCandidate(retained, retainedDistSq))
-            {
-                return retained;
-            }
-        }
-
-        NpcState? best = null;
-        long bestDistSq = long.MaxValue;
-        var bestAggroBucket = int.MaxValue;
-
-        foreach (var npc in _world.Npcs.Values)
-        {
-            var distSq = DistanceSq(centerX, centerY, npc.X, npc.Y);
-            if (!IsCandidate(npc, distSq))
-            {
-                continue;
-            }
-
-            if (!Settings.PreferAggroMobs)
-            {
-                if (distSq < bestDistSq)
-                {
-                    bestDistSq = distSq;
-                    best = npc;
-                }
-
-                continue;
-            }
-
-            var isRecentAggro = npc.LastAggroHitAtUtc != DateTime.MinValue
-                && (now - npc.LastAggroHitAtUtc).TotalSeconds <= AggroRecentWindowSec;
-            var aggroBucket = isRecentAggro ? 0 : 1;
-
-            if (aggroBucket < bestAggroBucket || (aggroBucket == bestAggroBucket && distSq < bestDistSq))
-            {
-                bestAggroBucket = aggroBucket;
-                bestDistSq = distSq;
-                best = npc;
-            }
-        }
-
-        return best;
+        return true;
     }
-    private void TickAutoLoot()
+
+    // ------------------------------------------------------------------ //
+    // Loot (sequential async burst)
+    // ------------------------------------------------------------------ //
+
+    private async Task LootNearbyAsync(CancellationToken ct, int maxAttempts = 56, bool walkToItems = true)
     {
-        var now = DateTime.UtcNow;
-        if (!Settings.AutoLoot || now < _nextLootAt)
-        {
-            return;
-        }
-
-        // AutoFight has dedicated post-kill loot logic; avoid parallel global loot pulses.
-        // However, allow fallback loot when fully idle to catch items missed by post-kill.
-        if (Settings.AutoFight)
-        {
-            var idleForLoot = _combatTargetObjectId == 0
-                && !_postKillActive
-                && !HasRecentIncomingDamage(now, 3500);
-            if (!idleForLoot)
-                return;
-        }
-
-        if (_postKillActive)
-        {
-            SetDecision("loot-paused-post-kill");
-            return;
-        }
-
         var me = _world.Me;
-        if (me.IsSitting)
-        {
-            SetDecision("loot-paused-sitting");
-            _nextLootAt = now.AddMilliseconds(800);
-            return;
-        }
-
-        // Suppress loot during MP recovery to prevent sit/stand spam:
-        // picking up items forces the character to stand, which immediately
-        // triggers another sit attempt from TickAutoFight/TickMpRest.
-        if (Settings.RestEnabled && _combatTargetObjectId == 0 && !_postKillActive && !HasRecentIncomingDamage(now, 2500))
-        {
-            var mpStandAt = Math.Max(2, Math.Min(100, Settings.StandMpPct));
-            if (me.MpPct < mpStandAt)
-            {
-                SetDecision($"loot-paused-mp-rest mp={me.MpPct:0.#}%<{mpStandAt}%");
-                _nextLootAt = now.AddMilliseconds(800);
-                return;
-            }
-        }
-
-        if (_combatTargetObjectId != 0
-            && _world.Npcs.TryGetValue(_combatTargetObjectId, out var combatTarget)
-            && !combatTarget.IsDead
-            && combatTarget.HpPct > 0.01f)
-        {
-            SetDecision($"loot-paused-combat target=0x{_combatTargetObjectId:X}");
-            return;
-        }
+        if (me.IsSitting || me.CurHp <= 0 || !Settings.AutoLoot) return;
 
         var searchRange = Math.Max(Settings.LootRange, Settings.LootPickupRange);
         var searchRangeSq = (long)searchRange * searchRange;
+        var pickupRange = Math.Max(70, Settings.LootPickupRange);
+        var pickupRangeSq = (long)pickupRange * pickupRange;
+        var corpseLinkRadius = Math.Max(Math.Max(searchRange, 380), Settings.LootPickupRange) + 440;
+        var corpseLinkRadiusSq = (long)corpseLinkRadius * corpseLinkRadius;
 
-        var item = _world.Items.Values.MinBy(x => DistanceSq(me.X, me.Y, x.X, x.Y));
-        if (item is null || DistanceSq(me.X, me.Y, item.X, item.Y) > searchRangeSq)
+        var attempts = 0;
+        var emptyPolls = 0;
+        var picked = 0;
+        var perOidTries = new Dictionary<int, int>();
+        var loosenCorpseAnchor = false;
+        var loggedCorpseStacks = false;
+
+        while (attempts < maxAttempts && !ct.IsCancellationRequested)
         {
-            _nextLootAt = now.AddMilliseconds(620);
-            return;
-        }
+            me = _world.Me;
+            var ax = 0;
+            var ay = 0;
+            var hasCorpseAnchor = !loosenCorpseAnchor
+                && _world.TryGetLootCorpseAnchor(TimeSpan.FromSeconds(14), out ax, out ay, out _);
+            var maxAnchorPlayer = Math.Max(Settings.LootRange, Settings.FightRange);
+            var maxAnchorPlayerSq = (long)maxAnchorPlayer * maxAnchorPlayer;
+            var anchorTooFarForWalk = walkToItems && hasCorpseAnchor
+                && CombatService.DistanceSq(me.X, me.Y, ax, ay) > maxAnchorPlayerSq;
+            var useCorpseAnchor = hasCorpseAnchor && !anchorTooFarForWalk;
 
-        var corpsePickupRange = Math.Max(70, Settings.LootPickupRange);
-        var corpsePickupRangeSq = (long)corpsePickupRange * corpsePickupRange;
-        var itemDistSq = DistanceSq(me.X, me.Y, item.X, item.Y);
-
-        if (itemDistSq > corpsePickupRangeSq)
-        {
-            if (Settings.MoveToLoot && TryMoveTo(item.X, item.Y, item.Z))
-                _nextLootAt = now.AddMilliseconds(320);
-            else
-                _nextLootAt = now.AddMilliseconds(620);
-
-            return;
-        }
-
-        TryInject(PacketBuilder.BuildAction(item.ObjectId, me.X, me.Y, me.Z, 0), "loot-pickup-action");
-        _nextLootAt = now.AddMilliseconds(620);
-    }
-    private bool TickMpRest()
-    {
-        var now = DateTime.UtcNow;
-        if (!Settings.RestEnabled || now < _nextRestToggleAt)
-        {
-            return false;
-        }
-
-        var me = _world.Me;
-        if (me.CurHp <= 0 || me.MaxHp <= 0)
-        {
-            return false;
-        }
-
-        // Never toggle sit/stand while combat flow is active.
-        if (Settings.AutoFight)
-        {
-            var inCombatFlow = _combatTargetObjectId != 0
-                || _postKillActive
-                || HasRecentIncomingDamage(now, 3000)
-                || _combatPhase is "target-confirm" or "attack-rotation" or "engage" or "progress-guard";
-            if (inCombatFlow)
+            List<GroundItemState> pool;
+            if (useCorpseAnchor)
             {
-                if (me.IsSitting && now >= _nextRestToggleAt && TryInject(PacketBuilder.BuildActionUse(0), "rest-stand-combat"))
+                pool = _world.Items.Values
+                    .Where(x => CombatService.DistanceSq(ax, ay, x.X, x.Y) <= corpseLinkRadiusSq)
+                    .ToList();
+                if (!loggedCorpseStacks && pool.Count > 0)
                 {
-                    _nextRestToggleAt = now.AddMilliseconds(950);
-                    _restExpectedIsSitting = false;
-                    _restExpectedStateUntilUtc = now.AddSeconds(4);
-                    SetDecision("rest-stand-combat");
-                    return true;
+                    loggedCorpseStacks = true;
+                    _log.Info($"[AutoCombat] Loot: {pool.Count} ground stack(s) near last kill (~{corpseLinkRadius}u)");
+                }
+            }
+            else
+            {
+                pool = _world.Items.Values
+                    .Where(x => CombatService.DistanceSq(me.X, me.Y, x.X, x.Y) <= searchRangeSq)
+                    .ToList();
+            }
+
+            if (!walkToItems)
+            {
+                var beforeFilter = pool.Count;
+                pool = pool
+                    .Where(x => CombatService.DistanceSq(me.X, me.Y, x.X, x.Y) <= pickupRangeSq)
+                    .ToList();
+                if (beforeFilter > 0 && pool.Count == 0)
+                    break;
+            }
+
+            var item = pool.Count == 0
+                ? null
+                : pool.MinBy(x => CombatService.DistanceSq(me.X, me.Y, x.X, x.Y));
+
+            var emptyLimit = useCorpseAnchor ? 18 : 6;
+            if (item is null)
+            {
+                emptyPolls++;
+                if (useCorpseAnchor && picked == 0 && emptyPolls >= 16)
+                {
+                    loosenCorpseAnchor = true;
+                    emptyPolls = 0;
+                }
+                if (emptyPolls >= emptyLimit)
+                    break;
+                await Task.Delay(useCorpseAnchor && picked == 0 ? 42 : 55, ct);
+                continue;
+            }
+
+            if (!useCorpseAnchor && CombatService.DistanceSq(me.X, me.Y, item.X, item.Y) > searchRangeSq)
+            {
+                emptyPolls++;
+                if (emptyPolls >= emptyLimit)
+                    break;
+                await Task.Delay(55, ct);
+                continue;
+            }
+
+            emptyPolls = 0;
+            var oid = item.ObjectId;
+            var tries = perOidTries.GetValueOrDefault(oid);
+            if (tries >= 2)
+            {
+                _world.Items.TryRemove(oid, out _);
+                perOidTries.Remove(oid);
+                continue;
+            }
+
+            var distSq = CombatService.DistanceSq(me.X, me.Y, item.X, item.Y);
+            if (distSq > pickupRangeSq)
+            {
+                if (!walkToItems || !Settings.MoveToLoot)
+                {
+                    attempts++;
+                    if (!walkToItems)
+                        continue;
+                    _world.Items.TryRemove(oid, out _);
+                    continue;
                 }
 
-                return false;
+                var ctx = BuildContext();
+                _combat.TryMoveTo(ctx, item.X, item.Y, item.Z);
+                var dist = Math.Sqrt(distSq);
+                var walkDelay = Math.Min(800, Math.Max(200, (int)(dist / 2.6)));
+                await Task.Delay(walkDelay, ct);
+                attempts++;
+                continue;
             }
-        }
 
-        if (_restExpectedIsSitting.HasValue)
-        {
-            if (me.IsSitting == _restExpectedIsSitting.Value)
-            {
-                _restExpectedIsSitting = null;
-                _restExpectedStateUntilUtc = DateTime.MinValue;
-            }
-            else if (now < _restExpectedStateUntilUtc)
-            {
-                return false;
-            }
+            var ctx2 = BuildContext();
+            var sent = _combat.TryInject(ctx2, PacketBuilder.BuildAction(oid, me.X, me.Y, me.Z, 0), "loot-pickup");
+            picked++;
+            attempts++;
+
+            if (sent)
+                await WaitForGroundItemRemovedAsync(oid, maxWaitMs: 520, ct);
             else
+                await Task.Delay(65, ct);
+
+            if (!_world.Items.ContainsKey(oid))
             {
-                _restExpectedIsSitting = null;
-                _restExpectedStateUntilUtc = DateTime.MinValue;
-            }
-        }
-
-        var sitAt = Math.Max(1, Math.Min(99, Settings.SitMpPct));
-        var standAt = Math.Max(sitAt + 1, Math.Min(100, Settings.StandMpPct));
-        var mp = me.MpPct;
-
-        if (!me.IsSitting && mp <= sitAt)
-        {
-            if (!TryInject(PacketBuilder.BuildActionUse(0), "rest-sit"))
-            {
-                return false;
-            }
-
-            _nextRestToggleAt = now.AddMilliseconds(950);
-            _nextFightActionAt = now.AddMilliseconds(350);
-            _nextLootAt = now.AddMilliseconds(350);
-            _restExpectedIsSitting = true;
-            _restExpectedStateUntilUtc = now.AddSeconds(4);
-            SetDecision($"rest-sit mp={mp:0.#}%");
-            return true;
-        }
-
-        if (!me.IsSitting || mp < standAt)
-        {
-            return false;
-        }
-
-        if (!TryInject(PacketBuilder.BuildActionUse(0), "rest-stand"))
-        {
-            return false;
-        }
-
-        _nextRestToggleAt = now.AddMilliseconds(950);
-        _restExpectedIsSitting = false;
-        _restExpectedStateUntilUtc = now.AddSeconds(4);
-        SetDecision($"rest-stand mp={mp:0.#}%");
-        return true;
-    }
-    private bool IsSpecialCombatSkill(int skillId)
-    {
-        if (skillId <= 0)
-        {
-            return false;
-        }
-
-        if (Settings.SpoilEnabled && Settings.SpoilSkillId > 0 && skillId == Settings.SpoilSkillId)
-        {
-            return true;
-        }
-
-        if (Settings.SweepEnabled && Settings.SweepSkillId > 0 && skillId == Settings.SweepSkillId)
-        {
-            return true;
-        }
-
-        return false;
-    }
-    private bool TryMoveTo(int destX, int destY, int destZ)
-    {
-        var now = DateTime.UtcNow;
-        if (now < _nextMoveAt)
-        {
-            return false;
-        }
-
-        var me = _world.Me;
-        var distSq = DistanceSq(me.X, me.Y, destX, destY);
-        if (distSq <= 64)
-        {
-            return false;
-        }
-
-        if (!TryInject(PacketBuilder.BuildMoveToLocation(destX, destY, destZ, me.X, me.Y, me.Z), "move"))
-        {
-            return false;
-        }
-
-        _nextMoveAt = now.AddMilliseconds(280);
-        return true;
-    }
-
-    private bool TryUseCombatRotation()
-    {
-        var dynamicRules = Settings.AttackSkills
-            .Where(x => x.SkillId > 0 && !IsSpecialCombatSkill(x.SkillId))
-            .ToList();
-
-        foreach (var rule in dynamicRules)
-        {
-            if (!TryCastSkill(rule.SkillId, forBuff: false, cooldownOverrideMs: Math.Max(250, rule.CooldownMs)))
-            {
+                perOidTries.Remove(oid);
+                await Task.Delay(22, ct);
                 continue;
             }
 
-            return true;
+            perOidTries[oid] = tries + 1;
+            await Task.Delay(85, ct);
         }
 
-        var fallback = new[] { Settings.CombatSkill1Id, Settings.CombatSkill2Id, Settings.CombatSkill3Id }
-            .Where(x => x > 0 && !IsSpecialCombatSkill(x));
-
-        foreach (var skillId in fallback)
-        {
-            if (!TryCastSkill(skillId, forBuff: false, cooldownOverrideMs: Settings.CombatSkillCooldownMs))
-            {
-                continue;
-            }
-
-            return true;
-        }
-
-        return false;
+        if (picked > 0)
+            _log.Info($"[AutoCombat] Loot: {picked} pickup injects");
     }
 
-    private bool TryCastSkill(int skillId, bool forBuff, int? cooldownOverrideMs = null, bool allowReservedSkill = false)
+    /// <summary>
+    /// After a pickup action, the client usually receives DeleteObject for the ground item.
+    /// Without this wait we spammed the same stack up to 4× when removal was slower than the fixed 250ms delay.
+    /// </summary>
+    private async Task WaitForGroundItemRemovedAsync(int objectId, int maxWaitMs, CancellationToken ct)
     {
-        if (skillId <= 0)
+        var deadline = DateTime.UtcNow.AddMilliseconds(Math.Max(80, maxWaitMs));
+        while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
         {
-            return false;
+            if (!_world.Items.ContainsKey(objectId))
+                return;
+            await Task.Delay(18, ct);
         }
-
-        if (!forBuff && !allowReservedSkill && IsSpecialCombatSkill(skillId))
-        {
-            SetDecision($"skill-reserved:{skillId}");
-            return false;
-        }
-
-        var hasKnownSkill = _world.Skills.ContainsKey(skillId);
-        if (!hasKnownSkill)
-        {
-            var canOptimisticSupportCast = forBuff && !allowReservedSkill;
-            if (!canOptimisticSupportCast && !allowReservedSkill)
-            {
-                SetDecision($"skill-missing:{skillId}");
-                return false;
-            }
-
-            SetDecision(canOptimisticSupportCast
-                ? $"skill-missing-optimistic:{skillId}"
-                : $"skill-missing-allow:{skillId}");
-        }
-
-        var now = DateTime.UtcNow;
-        if (_world.SkillCooldownReadyAtUtc.TryGetValue(skillId, out var serverReadyAt))
-        {
-            if (now < serverReadyAt)
-            {
-                _nextSkillById[skillId] = serverReadyAt;
-                SetDecision($"skill-cd-server:{skillId}");
-                return false;
-            }
-
-            if (serverReadyAt <= now.AddMilliseconds(-600))
-            {
-                _world.SkillCooldownReadyAtUtc.TryRemove(skillId, out _);
-            }
-        }
-
-        if (_nextSkillById.TryGetValue(skillId, out var nextAllowed) && now < nextAllowed)
-        {
-            SetDecision($"skill-cd:{skillId}");
-            return false;
-        }
-
-        var teonPipeline = Settings.AttackPipelineMode == AttackPipelineMode.TeonActionPlus2F;
-        var use2F = forBuff
-            ? teonPipeline || string.Equals(Settings.BuffSkillPacket, "2f", StringComparison.OrdinalIgnoreCase)
-            : teonPipeline || string.Equals(Settings.CombatSkillPacket, "2f", StringComparison.OrdinalIgnoreCase);
-
-        if (use2F)
-        {
-            if (!TryInject(PacketBuilder.BuildShortcutSkillUse(skillId), $"skill-2f:{skillId}"))
-            {
-                return false;
-            }
-        }
-        else
-        {
-            var payloadStyle = Settings.MagicSkillPayload;
-
-            if (!TryInject(PacketBuilder.BuildMagicSkillUse(skillId, payloadStyle: payloadStyle), $"skill-39:{skillId}"))
-            {
-                return false;
-            }
-        }
-
-        var cd = Math.Max(250, cooldownOverrideMs ?? Settings.CombatSkillCooldownMs);
-        _nextSkillById[skillId] = now.AddMilliseconds(cd);
-        return true;
     }
 
-    private void ResetCombatState()
+    // ------------------------------------------------------------------ //
+    // Helpers
+    // ------------------------------------------------------------------ //
+
+    private bool IsCasterMode()
+        => Settings.BattleMode == BotBattleMode.StrictCaster || Settings.Role == BotRole.CasterDD;
+
+    private bool HasWorldContext()
+        => _world.EnteredWorld || _world.Me.ObjectId != 0 || !_world.Npcs.IsEmpty || !_world.Items.IsEmpty;
+
+    private static bool IsTargetEliminated(BotContext ctx, int objectId)
     {
-        _combatTargetObjectId = 0;
-        _combatTargetLastHpPct = -1f;
-        _combatTargetAssignedAtUtc = DateTime.MinValue;
-        _combatLastProgressAtUtc = DateTime.MinValue;
-        _combatPhase = "idle";
-        _nextForceAttackAt = DateTime.MinValue;
-        _nextCompatAttackRequestAt = DateTime.MinValue;
-        _nextSpoilAt = DateTime.MinValue;
-        _nextSweepAt = DateTime.MinValue;
-        _nextTargetActionAt = DateTime.MinValue;
-        _preferAttackRequestUntilUtc = DateTime.MinValue;
-        _nextTransportSwitchAtUtc = DateTime.MinValue;
-        _assumedTargetObjectId = 0;
-        _assumedTargetUntilUtc = DateTime.MinValue;
-        _lastObservedSelfHp = -1;
-        _lastIncomingDamageAtUtc = DateTime.MinValue;
-        _nextEmergencyRetaliateAt = DateTime.MinValue;
-        _combatTargetLastSeenAtUtc = DateTime.MinValue;
-        _combatTargetLastX = 0;
-        _combatTargetLastY = 0;
-        _combatTargetLastZ = 0;
-        _combatTargetNpcTypeId = 0;
-        _combatTargetSpoilSucceeded = false;
-        _combatTargetLastHitByMeAtUtc = DateTime.MinValue;
-        _combatTargetHadCombatSignal = false;
-        _combatNoProgressStrikes = 0;
-        _killTimeoutFireCount = 0;
-        _casterChaseStartedAtUtc = DateTime.MinValue;
-        _casterStuckStrikes = 0;
-        _combatNoServerTargetSinceUtc = DateTime.MinValue;
-        _targetConfirmRecoveryStage = 0;
-        _targetConfirmRecoveryStartedAtUtc = DateTime.MinValue;
-        _criticalHoldActive = false;
-        _nextFightActionAt = DateTime.MinValue;
-        _nextRestToggleAt = DateTime.MinValue;
-        _restExpectedIsSitting = null;
-        _restExpectedStateUntilUtc = DateTime.MinValue;
+        if (objectId == 0) return true;
+        if (!ctx.World.Npcs.TryGetValue(objectId, out var npc)) return true;
+        return npc.IsDead || npc.HpPct <= 0.01f;
     }
 
-    private void ResetPostKillState()
-    {
-        _postKillActive = false;
-        _postKillTargetObjectId = 0;
-        _postKillNpcTypeId = 0;
-        _postKillX = 0;
-        _postKillY = 0;
-        _postKillZ = 0;
-        _postKillSpoilSucceeded = false;
-        _postKillStartedAtUtc = DateTime.MinValue;
-        _postKillSweepUntilUtc = DateTime.MinValue;
-        _postKillSpawnWaitUntilUtc = DateTime.MinValue;
-        _postKillMinWaitForLootUntilUtc = DateTime.MinValue;
-        _nextPostKillActionAt = DateTime.MinValue;
-        _postKillLootActions = 0;
-        _postKillEmptyPolls = 0;
-        _postKillItemsSeen = 0;
-        _postKillItemsPicked = 0;
-        _postKillItemsSkipped = 0;
-        _postKillTargetCanceled = false;
-        _postKillSweepAttempts = 0;
-        _postKillMoveToCorpseAttempts = 0;
-        _postKillReachedCorpseZone = false;
-        _postKillLootItemAttempts.Clear();
-        _postKillSeenItemIds.Clear();
-        _spoilAttemptCountByTarget.Clear();
-    }
-    private void SetSpoilPendingTarget(int objectId, DateTime now)
-    {
-        _spoilPendingTargetObjectId = objectId;
-        var pendingMs = Settings.SpoilOncePerTarget
-            ? Math.Max(12000, Settings.AttackNoProgressWindowMs + 3200)
-            : Math.Max(4200, Settings.AttackNoProgressWindowMs + 600);
-        _spoilPendingUntilUtc = now.AddMilliseconds(pendingMs);
-    }
+    private bool IsInCombatFlow()
+        => _combatPhase is "in_kill_loop" or "targeting" or "post-kill";
 
-    private void ClearSpoilPendingTarget(int? objectId = null)
+    private BotContext BuildContext()
+        => new(_world, Settings, DateTime.UtcNow, _proxy, _log);
+
+    private void TrackIncomingDamage(BotContext ctx)
     {
-        if (objectId is { } onlyForObjectId && _spoilPendingTargetObjectId != onlyForObjectId)
+        var me = ctx.World.Me;
+        if (_lastObservedSelfHp >= 0 && me.CurHp < _lastObservedSelfHp)
         {
+            _lastIncomingDamageAtUtc = ctx.Now;
+            if (!_criticalHoldActive)
+            {
+                var enterPct = Math.Max(5, Settings.CriticalHoldEnterHpPct);
+                if (me.HpPct <= enterPct)
+                {
+                    _criticalHoldActive = true;
+                    _log.Info($"[Bot] critical hold ENTER hp={me.HpPct:0.#}%");
+                }
+            }
+        }
+
+        if (_criticalHoldActive)
+        {
+            var resumePct = Math.Max(Settings.CriticalHoldEnterHpPct + 5, Settings.CriticalHoldResumeHpPct);
+            if (me.HpPct >= resumePct)
+            {
+                _criticalHoldActive = false;
+                _log.Info($"[Bot] critical hold RESUME hp={me.HpPct:0.#}%");
+            }
+        }
+
+        _lastObservedSelfHp = me.CurHp;
+    }
+
+    private void UpdateCombatPhaseFromRole(TickResult result)
+    {
+        switch (result)
+        {
+            case TickResult.Yielded:  SetCombatPhase("role-active"); break;
+            case TickResult.Blocked:  SetCombatPhase("role-blocked"); break;
+            case TickResult.Continue: SetCombatPhase("idle"); break;
+        }
+    }
+
+    private void SyncActiveRole()
+    {
+        var targetRole = Settings.Role switch
+        {
+            BotRole.CasterDD => (IBotRole)_casterDdRole,
+            BotRole.Spoiler => _spoilerRole,
+            BotRole.Healer => _healerRole,
+            BotRole.Buffer => _bufferRole,
+            _ => _meleeDdRole
+        };
+
+        if (ReferenceEquals(_activeRole, targetRole))
             return;
-        }
 
-        _spoilPendingTargetObjectId = 0;
-        _spoilPendingUntilUtc = DateTime.MinValue;
+        _activeRole.Reset();
+        _activeRole = targetRole;
+        _activeRole.Reset();
+        _log.Info($"[Bot] role switched to {Settings.Role}");
     }
-    private void EnsureCoordinatorMode()
-    {
-        var enabled = Settings.EnableRoleCoordinator;
-        var mode = enabled ? Settings.CoordMode : CoordMode.Standalone;
-        _coordinator.Configure(enabled, mode, Settings.CoordinatorChannel);
-    }
-    private bool IsSupportRole()
-        => Settings.Role is BotRole.Healer or BotRole.Buffer;
-    private bool IsCasterRole()
-        => Settings.Role == BotRole.CasterDD || Settings.BattleMode == BotBattleMode.StrictCaster;
-    private void PublishLeaderIntent(CharacterState me, int targetOid, string state, DateTime now)
+
+    // ------------------------------------------------------------------ //
+    // Coordinator
+    // ------------------------------------------------------------------ //
+
+    private void TickCoordinatorLeader(BotContext ctx)
     {
         if (!Settings.EnableRoleCoordinator || Settings.CoordMode != CoordMode.CoordinatorLeader)
-        {
             return;
-        }
+
+        var me = ctx.World.Me;
         _coordinatorSequence++;
         _coordinator.Publish(new CombatIntent
         {
             LeaderObjectId = me.ObjectId,
-            LeaderTargetOid = targetOid,
+            LeaderTargetOid = me.TargetId,
             LeaderX = me.X,
             LeaderY = me.Y,
             LeaderZ = me.Z,
-            CombatState = state,
-            PullTimestampUnixMs = new DateTimeOffset(now).ToUnixTimeMilliseconds(),
+            CombatState = _combatPhase,
+            PullTimestampUnixMs = new DateTimeOffset(ctx.Now).ToUnixTimeMilliseconds(),
             Sequence = _coordinatorSequence
         });
     }
-    private bool TryResolveCoordinatorFollowerTarget(CharacterState me, DateTime now, out NpcState? target)
+
+    private void TickCoordinatorFollower(BotContext ctx)
     {
-        target = null;
         if (!Settings.EnableRoleCoordinator || Settings.CoordMode != CoordMode.CoordinatorFollower)
-        {
-            return false;
-        }
+            return;
+
         if (!_coordinator.TryGetLatestIntent(Settings.CoordinatorStaleMs, out var intent))
-        {
-            return false;
-        }
-        if (intent.LeaderTargetOid != 0
-            && _world.Npcs.TryGetValue(intent.LeaderTargetOid, out var npc)
-            && npc.IsAttackable
-            && !npc.IsDead)
-        {
-            target = npc;
-            return true;
-        }
-        if (TryFollowLeaderIntent(me, intent, now))
-        {
-            SetCombatPhase("follower-follow-leader");
-            SetDecision("follower-follow-leader");
-        }
-        return true;
-    }
-    private bool TryFollowLeaderIntent(CharacterState me, CombatIntent intent, DateTime now)
-    {
+            return;
+
+        var me = ctx.World.Me;
+        var now = ctx.Now;
         if (now < _nextCoordinatorFollowAt)
-        {
-            return false;
-        }
+            return;
+
         var followDist = Math.Max(120, Settings.FollowDistance);
         var tolerance = Math.Max(30, Settings.FollowTolerance);
         var keepDist = followDist + tolerance;
         var keepDistSq = (long)keepDist * keepDist;
-        var distSq = DistanceSq(me.X, me.Y, intent.LeaderX, intent.LeaderY);
+        var distSq = CombatService.DistanceSq(me.X, me.Y, intent.LeaderX, intent.LeaderY);
+
         if (distSq <= keepDistSq)
+            return;
+
+        if (_combat.TryMoveTo(ctx, intent.LeaderX, intent.LeaderY, intent.LeaderZ))
         {
-            return false;
+            _nextCoordinatorFollowAt = now.AddMilliseconds(Math.Max(160, Settings.FollowRepathIntervalMs));
+            SetCombatPhase("follower-follow-leader");
+            _combat.SetDecision("follower-follow-leader");
         }
-        if (!TryMoveTo(intent.LeaderX, intent.LeaderY, intent.LeaderZ))
-        {
-            return false;
-        }
-        _nextCoordinatorFollowAt = now.AddMilliseconds(Math.Max(160, Settings.FollowRepathIntervalMs));
-        return true;
+    }
+
+    // ------------------------------------------------------------------ //
+    // Infrastructure
+    // ------------------------------------------------------------------ //
+
+    private void ResetAllServices()
+    {
+        _combat.ResetTimers();
+        _heal.Reset();
+        _buff.Reset();
+        _recharge.Reset();
+        _loot.Reset();
+        _postKill.Reset();
+        _rest.Reset();
+        _activeRole.Reset();
+        _criticalHoldActive = false;
+        _lastObservedSelfHp = -1;
+        _lastIncomingDamageAtUtc = DateTime.MinValue;
+        _lastCombatTargetOid = 0;
+        _combatPhase = "idle";
     }
 
     private void SetCombatPhase(string phase)
     {
         if (string.Equals(_combatPhase, phase, StringComparison.Ordinal))
-        {
             return;
-        }
 
         _combatPhase = phase;
         var now = DateTime.UtcNow;
         if (now < _nextPhaseDiagLogAt)
-        {
             return;
-        }
 
         _nextPhaseDiagLogAt = now.AddMilliseconds(650);
         _log.Info($"[AutoFight] phase => {phase}");
     }
 
-    private void SetDecision(string decision)
+    private void EnsureCoordinatorMode()
     {
-        _lastDecision = decision;
-        _lastDecisionAtUtc = DateTime.UtcNow;
-    }
-
-    private bool TryInject(byte[] plainBody, string action)
-        => SendCommand(plainBody, action).Status == BotCommandStatus.Sent;
-
-    private BotCommandResult SendCommand(byte[] plainBody, string action)
-    {
-        if (plainBody.Length == 0)
-        {
-            _lastCommand = BotCommandResult.Rejected(action, "empty-payload");
-            MaybeLogCommandOutcome(_lastCommand);
-            return _lastCommand;
-        }
-
-
-
-        if (_deadStopActive)
-        {
-            _lastCommand = BotCommandResult.Deferred(action, "dead-stop", plainBody[0]);
-            MaybeLogCommandOutcome(_lastCommand);
-            return _lastCommand;
-        }
-
-        var d = _proxy.Diagnostics;
-        if (!IsProxyReady())
-        {
-            SetDecision($"wait-proxy run={_proxy.IsRunning} gc={d.GameClientConnected} gs={d.GameServerConnected} cry={d.GameCryptoReady}");
-            _lastCommand = BotCommandResult.Deferred(action, "proxy-not-ready", plainBody[0]);
-            MaybeLogCommandOutcome(_lastCommand);
-            return _lastCommand;
-        }
-
-        try
-        {
-            _proxy.InjectToServer(plainBody);
-            SetDecision($"{action} 0x{plainBody[0]:X2}");
-            _lastCommand = BotCommandResult.Sent(action, plainBody[0]);
-            MaybeLogCommandOutcome(_lastCommand);
-            return _lastCommand;
-        }
-        catch (Exception ex)
-        {
-            _lastCommand = BotCommandResult.Error(action, ex.Message, plainBody[0]);
-            MaybeLogCommandOutcome(_lastCommand);
-            return _lastCommand;
-        }
-    }
-
-    private void MaybeLogCommandOutcome(BotCommandResult result)
-    {
-        var now = DateTime.UtcNow;
-        if (result.Status == BotCommandStatus.Sent)
-        {
-            if (result.Opcode is 0x01 or 0x04 or 0x0A or 0x2F or 0x39 or 0x45 or 0x48 && now >= _nextSentCommandDiagLogAt)
-            {
-                _nextSentCommandDiagLogAt = now.AddMilliseconds(420);
-                _log.Info($"[BotCmd] Sent {result.Action} op=0x{result.Opcode:X2}");
-            }
-
-            return;
-        }
-
-        if (now < _nextCommandDiagLogAt)
-        {
-            return;
-        }
-
-        _nextCommandDiagLogAt = now.AddMilliseconds(900);
-        var d = _proxy.Diagnostics;
-        _log.Info($"[BotCmd] {result.Status} {result.Action} op=0x{result.Opcode:X2} reason={result.Reason} stage={d.SessionStage} gc={d.GameClientConnected} gs={d.GameServerConnected} cry={d.GameCryptoReady}");
+        var enabled = Settings.EnableRoleCoordinator;
+        var mode = enabled ? Settings.CoordMode : CoordMode.Standalone;
+        _coordinator.Configure(enabled, mode, Settings.CoordinatorChannel);
     }
 
     private bool IsProxyReady()
@@ -3051,283 +1068,31 @@ public sealed class BotEngine
         if (_cts is null)
         {
             if (_runtimeState != BotRuntimeState.Stopped)
-            {
                 TransitionRuntime(BotRuntimeState.Stopped, "loop-without-cts");
-            }
-
             return;
         }
 
         if (IsProxyReady())
         {
             if (_runtimeState != BotRuntimeState.Running)
-            {
                 TransitionRuntime(BotRuntimeState.Running, "game-crypto-ready");
-            }
-
             return;
         }
 
         if (_runtimeState != BotRuntimeState.PausedNoSession)
-        {
             TransitionRuntime(BotRuntimeState.PausedNoSession, "game-disconnected");
-        }
     }
 
     private void TransitionRuntime(BotRuntimeState next, string reason, bool logTransition = true)
     {
         if (_runtimeState == next && string.Equals(_runtimeReason, reason, StringComparison.Ordinal))
-        {
             return;
-        }
 
         _runtimeState = next;
         _runtimeReason = reason;
         _lastRuntimeTransitionAtUtc = DateTime.UtcNow;
 
         if (logTransition)
-        {
             _log.Info($"Bot runtime => {next} ({reason})");
-        }
-    }
-
-    private static long DistanceSq(int x1, int y1, int x2, int y2)
-    {
-        var dx = x1 - x2;
-        var dy = y1 - y2;
-        return (long)dx * dx + (long)dy * dy;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -9,6 +9,8 @@ namespace L2Companion.UI;
 
 public partial class OverlayWidgetWindow : Window
 {
+    public event Action? BotToggleRequested;
+
     public OverlayWidgetWindow()
     {
         InitializeComponent();
@@ -43,6 +45,9 @@ public partial class OverlayWidgetWindow : Window
         BotStateText.Text = botRunning ? "BOT ON" : "BOT OFF";
         BotStateBadge.Background = botRunning ? B("#2F7350") : B("#2A4E66");
         BotStateBadge.BorderBrush = botRunning ? B("#8BE6AE") : B("#7CC3FF");
+        BotToggleButton.Content = botRunning ? "Stop Bot" : "Start Bot";
+        BotToggleButton.Background = botRunning ? B("#7B2D3A") : B("#2A4E66");
+        BotToggleButton.BorderBrush = botRunning ? B("#F6A3B3") : B("#7CC3FF");
 
         HpBar.Value = hpPct;
         MpBar.Value = mpPct;
@@ -161,5 +166,10 @@ public partial class OverlayWidgetWindow : Window
         {
             DragMove();
         }
+    }
+
+    private void OnBotToggleButtonClick(object sender, RoutedEventArgs e)
+    {
+        BotToggleRequested?.Invoke();
     }
 }
